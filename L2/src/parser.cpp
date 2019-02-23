@@ -25,62 +25,66 @@ namespace L2 {
   std::vector<std::string> callee_save = {"r12", "r13", "r14", "r15", "rbp", "rbx"};
   std::vector<std::string> gp_registers = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi", "r12", "r13", "r14", "r15", "rbp", "rbx"};
 
-  bool isVar(std::string var){
-    return (var[0] == '%' || isRegister(var));
-  }
-  void addVarGen(std::string var, std::set<Variable*> &gen, L2::Function *f, L2::Instruction *i){
-    if (isVar(var)){
-      if (f->variables.count(var)){
-        f->variables[var]->instructions.push_back(i);
-        gen.insert(f->variables[var]);
-      }
-      else{
-        auto var_obj = new Variable(var);
-        var_obj->instructions.push_back(i);
-        gen.insert(var_obj);
-        f->variables[var] = var_obj;
-      }
-    }
-  }
-
-  void addVarKill(std::string var, std::set<Variable*> &kill, L2::Function *f, L2::Instruction *i){
-   if (isVar(var)){
-    if (f->variables.count(var)){
-        f->variables[var]->instructions.push_back(i);
-        kill.insert(f->variables[var]);
-      }
-      else{
-        auto var_obj = new Variable(var);
-        var_obj->instructions.push_back(i);
-        kill.insert(var_obj);
-        f->variables[var] = var_obj;
-      }
-   }
-  }
-
-  void addVarGenKill(std::string var, std::set<Variable*> &gen, std::set<Variable*> &kill, L2::Function *f, L2::Instruction *i){
-    if (isVar(var)){
-      if (f->variables.count(var)){
-        f->variables[var]->instructions.push_back(i);
-        gen.insert(f->variables[var]);
-        kill.insert(f->variables[var]);
-      }
-      else{
-        auto var_obj = new Variable(var);
-        var_obj->instructions.push_back(i);
-        gen.insert(f->variables[var]);
-        kill.insert(var_obj);
-        f->variables[var] = var_obj;
-      }
-    }
-  }
-
-  
-
   bool isRegister(std::string reg){
     return (reg == "rdi" || reg == "rsi" || reg == "rdx" || reg == "rcx" || reg == "r8" || reg == "r9" || reg == "rax" || reg == "rbx" || reg == "rbp" || 
         reg == "r10" || reg == "r11" || reg == "r12" || reg == "r13" || reg == "r14" || reg == "r15" || reg == "rsp");
   }
+
+  bool isVar(std::string var){
+    return (var[0] == '%' || isRegister(var));
+  }
+  void addVarGen(std::string var, L2::Function *f, L2::Instruction *i){
+    if (isVar(var) && var != "rsp"){
+      if (f->variables.count(var)){
+        f->variables[var]->instructions.push_back(i);
+        i->variables_read.insert(f->variables[var]);
+      }
+      else{
+        auto var_obj = new Variable(var);
+        var_obj->instructions.push_back(i);
+        i->variables_read.insert(var_obj);
+        f->variables[var] = var_obj;
+      }
+      
+    }
+    return;
+  }
+
+  void addVarKill(std::string var, L2::Function *f, L2::Instruction *i){
+    if (isVar(var) && var != "rsp"){
+      if (f->variables.count(var)){
+          f->variables[var]->instructions.push_back(i);
+          i->variables_killed.insert(f->variables[var]);
+        }
+        else{
+          auto var_obj = new Variable(var);
+          var_obj->instructions.push_back(i);
+          i->variables_killed.insert(var_obj);
+          f->variables[var] = var_obj;
+        }
+      }
+    return;
+  }
+
+  void addVarGenKill(std::string var, L2::Function *f, L2::Instruction *i){
+    if (isVar(var) && var != "rsp"){
+      if (f->variables.count(var)){
+        f->variables[var]->instructions.push_back(i);
+        i->variables_read.insert(f->variables[var]);
+        i->variables_killed.insert(f->variables[var]);
+      }
+      else{
+        auto var_obj = new Variable(var);
+        var_obj->instructions.push_back(i);
+        i->variables_read.insert(var_obj);
+        i->variables_killed.insert(var_obj);
+        f->variables[var] = var_obj;
+      }
+    }
+    return;
+  }
+
+  
 
   /* 
    * Grammar rules from now on.
@@ -188,16 +192,6 @@ namespace L2 {
       > 
     > {};
 
-  struct misc_keyword_rule:
-    pegtl::sor<
-      stack_arg,
-      go_to,
-      cjump,
-      mem,
-      call,
-      str_return
-    >{};
-
   struct operator_rule:
     pegtl::sor<
       move,
@@ -269,7 +263,9 @@ namespace L2 {
 
   struct Instruction_return_rule:
     pegtl::seq<
-      str_return
+      seps,
+      str_return,
+      seps
     > { };
   
   struct Instruction_three_op_rule:
@@ -439,6 +435,7 @@ namespace L2 {
 
   struct Function_rule:
     pegtl::seq<
+      seps,
       pegtl::one< '(' >,
       seps,
       function_name,
@@ -449,11 +446,13 @@ namespace L2 {
       seps,
       Instructions_rule,
       seps,
-      pegtl::one< ')' >
+      pegtl::one< ')' >,
+      seps
     > {};
 
   struct spill_file_rule:
     pegtl::seq<
+      seps,
       Function_rule,
       seps
     > {};
@@ -560,7 +559,59 @@ namespace L2 {
     }
   };
 
-  template<> struct action < misc_keyword_rule > {
+  template<> struct action < stack_arg > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+  template<> struct action < go_to > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+  template<> struct action < cjump > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+  template<> struct action < mem > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+  template<> struct action < call > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+
+  template<> struct action < runtime_rule > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+
+  template<> struct action < inc_dec_rule > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+
+  template<> struct action < at > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      parsed_registers.push_back(in.string());
+    }
+  };
+
+  template<> struct action < Label_rule > {
     template< typename Input >
     static void apply(const Input & in, Program & p){
       parsed_registers.push_back(in.string());
@@ -573,7 +624,12 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       //TODO: store rax and callee saved registers
-     // currentF->instructions.push_back(i);
+      auto i = new Instruction(parsed_registers, L2::RET);
+      for (std::string reg : callee_save){
+        addVarGen(reg, currentF, i);
+      }
+      addVarGen("rax", currentF, i);
+      currentF->instructions.push_back(i);
       parsed_registers = {};
     }
   };
@@ -584,36 +640,8 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      addVarGen(parsed_registers[1], gen, currentF, i);
-      addVarGen(parsed_registers[4], gen, currentF, i);
-      if (isVar(parsed_registers[1])){
-        if (currentF->variables.count(parsed_registers[1])){
-          currentF->variables[parsed_registers[1]]->instructions.push_back(i);
-          gen.insert(currentF->variables[parsed_registers[1]]);
-        }
-        else{
-          auto var = new Variable(parsed_registers[1]);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[parsed_registers[1]] = var;
-        }
-      }
-      if (isVar(parsed_registers[4])){
-        if (currentF->variables.count(parsed_registers[4])){
-          currentF->variables[parsed_registers[4]]->instructions.push_back(i);
-          gen.insert(currentF->variables[parsed_registers[4]]);
-        }
-        else{
-          auto var = new Variable(parsed_registers[4]);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[parsed_registers[4]] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarGen(parsed_registers[1], currentF, i);
+      addVarGen(parsed_registers[4], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {};
     }
@@ -625,36 +653,12 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      if (isVar(parsed_registers[0])){
-        std::string var_name = parsed_registers[0];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          kill.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          kill.insert(var);
-          currentF->variables[var_name] = var;
-        }
+      std::string op = parsed_registers[1];
+      addVarKill(parsed_registers[0], currentF, i);
+      if (op != "<-"){
+        addVarGen(parsed_registers[0], currentF, i);
       }
-      if (isVar(parsed_registers[3])){
-        std::string var_name = parsed_registers[3];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[parsed_registers[4]] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarGen(parsed_registers[3], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {};
     }
@@ -666,36 +670,8 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::CJUMP2);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      if (isVar(parsed_registers[1])){
-        std::string var_name = parsed_registers[1];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-      if (isVar(parsed_registers[3])){
-        std::string var_name = parsed_registers[3];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[parsed_registers[4]] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarGen(parsed_registers[1], currentF, i);
+      addVarGen(parsed_registers[3], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {};
     } 
@@ -707,36 +683,8 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::CJUMP);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      if (isVar(parsed_registers[1])){
-        std::string var_name = parsed_registers[1];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-      if (isVar(parsed_registers[3])){
-        std::string var_name = parsed_registers[3];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[parsed_registers[4]] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarGen(parsed_registers[1], currentF, i);
+      addVarGen(parsed_registers[3],currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {};
     }
@@ -758,11 +706,17 @@ namespace L2 {
   template<> struct action < Instruction_call_runtime_rule > {
     template< typename Input >
 	  static void apply( const Input & in, Program & p){
-      // TODO STUFFFFF
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      i->variables_read = {};
-      i->variables_killed = {};
+      // for (std::string reg : arguments){
+      //   addVarGen(reg, currentF, i);
+      // }
+      for (int ii = 0; ii < std::stoi(parsed_registers[2]); ii++){
+        addVarGen(arguments[ii], currentF, i);
+      }
+      for (std::string reg : caller_save){
+        addVarKill(reg, currentF, i);
+      }
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -772,11 +726,16 @@ namespace L2 {
   template<> struct action < Instruction_call_rule > {
     template< typename Input >
 	  static void apply( const Input & in, Program & p){
-      // TODO STUFF
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      i->variables_read = {};
-      i->variables_killed = {};
+      int64_t num_args = std::stoi(parsed_registers[2]);
+      for (int ii = 0; ii < num_args; ii++){
+        addVarGen(arguments[ii], currentF, i);
+      }
+      addVarGen(parsed_registers[1], currentF, i);
+      for (std::string reg : caller_save){
+        addVarKill(reg, currentF, i);
+      }
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -788,23 +747,7 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::STACK);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      if (isVar(parsed_registers[0])){
-        std::string var_name = parsed_registers[0];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          kill.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          kill.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarKill(parsed_registers[0], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -816,23 +759,7 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      std::string var_name = parsed_registers[0];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        kill.insert(currentF->variables[var_name]);
-        gen.insert(currentF->variables[var_name]);
-      }
-      else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        kill.insert(var);
-        gen.insert(var);
-        currentF->variables[var_name] = var;
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarGenKill(parsed_registers[0], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -844,47 +771,9 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-
-      std::string var_name = parsed_registers[0];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        kill.insert(currentF->variables[var_name]);
-      }
-      else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        kill.insert(var);
-        currentF->variables[var_name] = var;
-      }
-
-      var_name = parsed_registers[2];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        gen.insert(currentF->variables[var_name]);
-      }
-      else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        gen.insert(var);
-        currentF->variables[var_name] = var;
-      }
-
-      var_name = parsed_registers[3];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        gen.insert(currentF->variables[var_name]);
-      }
-      else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        gen.insert(var);
-        currentF->variables[var_name] = var;
-      }
-
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarKill(parsed_registers[0], currentF, i);
+      addVarGen(parsed_registers[2], currentF, i);
+      addVarGen(parsed_registers[3], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -896,50 +785,9 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-
-      std::string var_name = parsed_registers[0];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        kill.insert(currentF->variables[var_name]);
-      }
-      else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        kill.insert(var);
-        currentF->variables[var_name] = var;
-      }
-
-      if (isVar(parsed_registers[2])){
-        var_name = parsed_registers[2];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-
-      if (isVar(parsed_registers[4])){
-        var_name = parsed_registers[4];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill;
+      addVarKill(parsed_registers[0], currentF, i);
+      addVarGen(parsed_registers[2], currentF, i);
+      addVarGen(parsed_registers[4], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -951,42 +799,14 @@ namespace L2 {
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::set<Variable*> gen;
-      std::set<Variable*> kill;
-      std::string var_name = parsed_registers[0];
       std::string op = parsed_registers[1];
-      if (currentF->variables.count(var_name)){
-        currentF->variables[var_name]->instructions.push_back(i);
-        kill.insert(currentF->variables[var_name]);
-        if (op != "<-"){
-          gen.insert(currentF->variables[var_name]);
-        }
+      if (op != "<-"){
+        addVarGenKill(parsed_registers[0], currentF, i);
       }
       else{
-        auto var = new Variable(var_name);
-        var->instructions.push_back(i);
-        currentF->variables[var_name] = var;
-        kill.insert(var);
-        if (op != "<-"){
-          gen.insert(var);
-        }
+        addVarKill(parsed_registers[0], currentF, i);
       }
-
-      if (isVar(parsed_registers[2])){
-        var_name = parsed_registers[2];
-        if (currentF->variables.count(var_name)){
-          currentF->variables[var_name]->instructions.push_back(i);
-          gen.insert(currentF->variables[var_name]);
-        }
-        else{
-          auto var = new Variable(var_name);
-          var->instructions.push_back(i);
-          gen.insert(var);
-          currentF->variables[var_name] = var;
-        }
-      }
-      i->variables_read = gen;
-      i->variables_killed = kill ;
+      addVarGen(parsed_registers[2], currentF, i);
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }
@@ -1003,6 +823,7 @@ namespace L2 {
       i->variables_read = {};
       currentF->labels[parsed_registers[0]] = i;
       currentF->instructions.push_back(i);
+      parsed_registers = {};
     }
   };
 

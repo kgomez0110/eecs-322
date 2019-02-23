@@ -22,6 +22,18 @@ namespace L2 {
     }
     return 0;
   }
+
+  bool setDifferent(std::vector<std::set<Variable*>> in, std::vector<std::set<Variable*>> out, std::vector<std::set<Variable*>> old_in, std::vector<std::set<Variable*>> old_out){
+    if (old_in.size() == 0){
+      return true;
+    }
+    for (int ii = 0; ii<in.size(); ii++){
+      if (in[ii] != old_in[ii] || out[ii] != old_out[ii]){
+        return true;
+      }
+    }
+    return false;
+  }    
   std::pair<std::vector<std::set<Variable*>>, std::vector<std::set<Variable*>>> liveness_analysis(Function f){
     int64_t num_instructions = f.instructions.size();
     std::vector<std::set<Variable*>> in;
@@ -29,16 +41,14 @@ namespace L2 {
     std::vector<std::set<Variable*>> old_in;
     std::vector<std::set<Variable*>> old_out;
     std::set<Variable*> kill;
-    bool different;
-    bool change = true;
+    bool different = true;
     for (int ii = 0; ii<num_instructions; ii++){
       in.push_back({});
       out.push_back({});
     }
 
     do {
-      different = false;
-      for (int ii = num_instructions-1; ii>=0; ii++){
+      for (int ii = num_instructions-1; ii>=0; ii--){
         Instruction* instruction = f.instructions[ii];
         in[ii] = instruction->variables_read;
         kill = instruction->variables_killed;
@@ -60,6 +70,7 @@ namespace L2 {
             for (Variable* var : in[second_succ_index]){
               out[ii].insert(var);
             } 
+            break;
           }
           case CJUMP: {
             // cjump t cmp label
@@ -71,16 +82,18 @@ namespace L2 {
             for (Variable* var : in[second_succ_index]){
               out[ii].insert(var);
             } 
+            break;
           }
           case GOTO: {
             // goto label
-            std::string label1 = instruction->operands[4];
+            std::string label1 = instruction->operands[1];
             Instruction* first_succ = f.labels[label1];
             int64_t first_succ_index = index_instruction(f, first_succ, num_instructions);
             out[ii] = in[first_succ_index];
+            break;
           }
           case RET: {
-            out[ii] = {};
+            break;
           }
           case LABEL:
           case STACK:
@@ -90,17 +103,12 @@ namespace L2 {
             }
           }
         }
-        if (!different){
-          different = (old_in[ii] != in[ii]) || (old_out[ii] != out[ii]);
-        }
       }
-      if (!different){
-        change = false;
-      }
+      different = setDifferent(in, out, old_in, old_out);
       old_in = in;
       old_out = out;
     }
-    while (change);
+    while (different);
 
     std::pair<std::vector<std::set<Variable*>>, std::vector<std::set<Variable*>>> result = {in, out};
     return result;

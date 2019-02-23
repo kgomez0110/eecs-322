@@ -52,7 +52,8 @@ int main(
     switch (opt){
 
       case 'l':
-        liveness_only = strtoul(optarg, NULL, 0);
+        // liveness_only = strtoul(optarg, NULL, 0);
+        liveness_only = true;
         break ;
 
       case 'i':
@@ -132,8 +133,41 @@ int main(
   if (liveness_only){
     //TODO
     L2::Function f = L2::parse_function(argv[optind]);
+    // std::string str = "/home/kgu3753/eecs-322/L2/tests/liveness/test4.L2f";
+    // char *cstr = new char[str.length() + 1];
+    // strcpy(cstr, str.c_str());
+    // L2::Function f = L2::parse_function(cstr);
+    // delete [] cstr;
     std::pair<std::vector<std::set<L2::Variable*>>, std::vector<std::set<L2::Variable*>>> in_out = L2::liveness_analysis(f);
-    L2::print_liveness(in_out.first, in_out.second);
+    std::vector<std::set<L2::Variable*>> in = in_out.first;
+    std::vector<std::set<L2::Variable*>> out = in_out.second;
+    std::cout << "(" << std::endl << "(in" << std::endl;
+    for (std::set<L2::Variable*> vec : in){
+      std::cout << "(";
+      for (L2::Variable* var : vec){
+        if (var->name[0] == '%'){
+          std::cout << var->name.substr(1) << " ";
+        }
+        else{
+          std::cout << var->name << " ";
+        }
+      }
+      std::cout << ")" << std::endl;
+    }
+    std::cout << ")\n\n(out\n";
+    for (std::set<L2::Variable*> vec : out){
+      std::cout << "(";
+      for (L2::Variable* var : vec){
+        if (var->name[0] == '%'){
+          std::cout << var->name.substr(1) << " ";
+        }
+        else{
+          std::cout << var->name << " ";
+        }
+      }
+      std::cout << ")\n";
+    }
+    std::cout << ")\n\n)";
     return 0;
   }
 

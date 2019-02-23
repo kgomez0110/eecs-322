@@ -19,7 +19,7 @@ bin:
 	mkdir -p $@
 
 $(PL_CLASS): $(OBJ_FILES)
-	$(CC) $(LD_FLAGS) -o ./bin/$@ $^
+	$(CC) $(LD_FLAGS) -g -o ./bin/$@ $^
 
 obj/%.o: src/%.cpp
 	$(CC) $(CC_FLAGS) -c -o $@ $<
