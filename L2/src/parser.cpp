@@ -19,6 +19,8 @@ using namespace std;
 namespace L2 {
   
   std::vector<std::string> parsed_registers;
+  std::string prefix;
+  std::string spill_var;
 
   std::vector<std::string> arguments = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
   std::vector<std::string> caller_save = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi"};
@@ -450,10 +452,20 @@ namespace L2 {
       seps
     > {};
 
+  struct spill_target:
+    variable_rule {};
+  
+  struct spill_prefix:
+    variable_rule {};
+
   struct spill_file_rule:
     pegtl::seq<
       seps,
       Function_rule,
+      seps,
+      spill_target,
+      seps,
+      spill_prefix,
       seps
     > {};
 
@@ -618,13 +630,27 @@ namespace L2 {
     }
   };
 
+  template<> struct action < spill_target > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      spill_var = in.string();
+    }
+  };
+
+  template<> struct action < spill_prefix > {
+    template< typename Input >
+    static void apply(const Input & in, Program & p){
+      prefix = in.string();
+    }
+  };
+
   // return
   template<> struct action < Instruction_return_rule > {
     template< typename Input >
 	  static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       //TODO: store rax and callee saved registers
-      auto i = new Instruction(parsed_registers, L2::RET);
+      auto i = new Instruction({"return"}, L2::RET);
       for (std::string reg : callee_save){
         addVarGen(reg, currentF, i);
       }
@@ -831,6 +857,8 @@ namespace L2 {
   };
 
 
+
+
   
   Program parse_file (char *fileName){
 
@@ -859,13 +887,13 @@ namespace L2 {
     return *p.functions.back();
   }
 
-  Function parse_spill_function (char *fileName){
+  std::pair<std::pair<std::string, std::string>, Function> parse_spill_function (char *fileName){
     pegtl::analyze< grammar_spill > ();
 
     file_input< > fileInput(fileName);
     Program p;
     parse< grammar_spill, action >(fileInput, p);
 
-    return *p.functions.back();
+    return {{spill_var, prefix}, *p.functions.back()};
   }
 }

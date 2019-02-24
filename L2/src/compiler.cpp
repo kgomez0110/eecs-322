@@ -22,6 +22,7 @@
 //#include <utils.h>
 #include <liveness.h>
 #include <interference.h>
+#include <spiller.h>
 
 using namespace std;
 
@@ -124,6 +125,31 @@ int main(
      * Spill.
      */
      //TODO
+
+    std::pair<std::pair<std::string, std::string>, L2::Function> p = L2::parse_spill_function(argv[optind]);
+    std::string spill_var = p.first.first;
+    std::string prefix = p.first.second;
+    L2::Function f = p.second;
+
+    L2::Function newF = L2::spillVar(spill_var, prefix, f);
+
+    std::cout << "(:" << newF.name.substr(1) << "\n";
+    std::cout << "\t" << std::to_string(newF.arguments) << " " << std::to_string(newF.locals) << "\n";
+    for (L2::Instruction* ii : newF.instructions){
+      std::cout << "\t";
+      if (ii->operands.size() == 2 && (ii->operands[1] == "++" || ii->operands[1] == "--")){
+        std::cout << ii->operands[0] << ii->operands[1];
+      }
+      else{
+        std::cout << ii->operands[0];
+        for (int jj = 1; jj<ii->operands.size(); jj++){
+          std::cout << " " << ii->operands[jj];
+        }
+      }
+      std::cout << "\n";
+    }
+    std::cout << ")" << std::endl;
+
 
     return 0;
   }
