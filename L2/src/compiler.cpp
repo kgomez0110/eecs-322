@@ -21,6 +21,7 @@
 //#include <register_allocation.h>
 //#include <utils.h>
 #include <liveness.h>
+#include <interference.h>
 
 using namespace std;
 
@@ -175,32 +176,38 @@ int main(
    * Interference graph test.
    */
   if (interference_only){
-    // std::vector<std::vector<std::vector<std::string>>> sets = L2::parse_function(argv[optind]);
-    // std::vector<std::vector<std::string>> in = sets[0];
-    // std::vector<std::vector<std::string>> out = sets[1];
-    // std::unordered_map<std::string, std::set<std::string>> graph = L2::generate_graph(in, out, L2::get_kill());
-    // std::unordered_map<std::string, std::set<std::string>>::iterator it = graph.begin();
-    // while (it != graph.end()){
-    //   if (it->first[0] == '%'){
-    //     std::cout << it->first.substr(1);
-    //   }
-    //   else{
-    //     std::cout << it->first;
-    //   }
-    //   std::set<std::string>::iterator its = it->second.begin();
-    //   while (its != it->second.end()){
-    //     std::string temp = *its;
-    //     if (temp[0] == '%'){
-    //       std::cout << ' ' << temp.substr(1);
-    //     }
-    //     else{
-    //       std::cout << ' ' << temp;
-    //     }
-    //     its++;
-    //   }
-    //   std::cout << '\n';
-    //   it++;
-    // }
+    L2::Function f = L2::parse_function(argv[optind]);
+    // std::string str = "/home/kgu3753/eecs-322/L2/tests/interference/test1.L2f";
+    // char *cstr = new char[str.length() + 1];
+    // strcpy(cstr, str.c_str());
+    // L2::Function f = L2::parse_function(cstr);
+    // delete [] cstr;
+    std::pair<std::vector<std::set<L2::Variable*>>, std::vector<std::set<L2::Variable*>>> in_out = L2::liveness_analysis(f);
+    std::vector<std::set<L2::Variable*>> in = in_out.first;
+    std::vector<std::set<L2::Variable*>> out = in_out.second;
+    L2::Graph g = L2::generateGraph(in, out, f);
+    std::unordered_map<L2::Variable*, L2::Node*>::iterator it = g.nodes.begin();
+    while (it != g.nodes.end()){
+      if (it->first->name[0] == '%'){
+        std::cout << it->first->name.substr(1) << " ";
+      }
+      else {
+        std::cout << it->first->name << " ";
+      }
+      
+      std::set<L2::Node*>::iterator set_it = it->second->neighbors.begin();
+      while (set_it != it->second->neighbors.end()){
+        if ((*set_it)->var->name[0] == '%'){
+          std::cout << (*set_it)->var->name.substr(1) << " ";
+        }
+        else {
+          std::cout << (*set_it)->var->name << " ";
+        }
+        set_it++;
+      }
+      std::cout << "\n";
+      it++;
+    }
     return 0;
   }
 

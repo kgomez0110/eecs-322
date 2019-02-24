@@ -807,6 +807,9 @@ namespace L2 {
         addVarKill(parsed_registers[0], currentF, i);
       }
       addVarGen(parsed_registers[2], currentF, i);
+      if ((op == "<<=" || op == ">>=") && isVar(parsed_registers[2])){
+        i->inst = L2::SOPSX;
+      }
       currentF->instructions.push_back(i);
       parsed_registers = {}; 
     }

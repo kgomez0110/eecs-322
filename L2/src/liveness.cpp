@@ -97,6 +97,7 @@ namespace L2 {
           }
           case LABEL:
           case STACK:
+          case SOPSX:
           case OTHER: {
             if (ii != num_instructions-1){
               out[ii] = in[ii+1];

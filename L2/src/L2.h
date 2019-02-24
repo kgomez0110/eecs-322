@@ -13,7 +13,8 @@ namespace L2 {
     GOTO,
     LABEL,
     STACK,
-    OTHER
+    OTHER,
+    SOPSX
   };
   struct Instruction;
   
