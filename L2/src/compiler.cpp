@@ -133,7 +133,7 @@ int main(
 
     L2::Function newF = L2::spillVar(spill_var, prefix, f);
 
-    std::cout << "(:" << newF.name.substr(1) << "\n";
+    std::cout << "(" << newF.name << "\n";
     std::cout << "\t" << std::to_string(newF.arguments) << " " << std::to_string(newF.locals) << "\n";
     for (L2::Instruction* ii : newF.instructions){
       std::cout << "\t";
@@ -242,6 +242,97 @@ int main(
    */
   if (enable_code_generator){
     //TODO
+    L2::Program p = L2::parse_file(argv[optind]);
+    // std::string str = "/home/kgu3753/eecs-322/L2/tests/cheungmatt_15540_5156847_hw2_1.L2";
+    // char *cstr = new char[str.length() + 1];
+    // strcpy(cstr, str.c_str());
+    // L2::Program p = L2::parse_file(cstr);
+    // delete [] cstr;
+
+    std::vector<std::string> gp_reg = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi", "r12", "r13", "r14", "rbp", "rbx", "r15"};
+    L2::Program newP;
+    newP.entryPointLabel = p.entryPointLabel;
+    int count = 0;
+    bool all_colored = false;
+    L2::Graph g;
+    for (L2::Function* f : p.functions){
+      L2::Function tempF = *f;
+      std::string pre = "%Sha";
+      all_colored = false;
+      while (!all_colored){
+        std::pair<std::vector<std::set<L2::Variable*>>, std::vector<std::set<L2::Variable*>>> in_out = L2::liveness_analysis(tempF);
+        std::vector<std::set<L2::Variable*>> in = in_out.first;
+        std::vector<std::set<L2::Variable*>> out = in_out.second;
+        g = L2::generateGraph(in, out, tempF);
+        std::vector<L2::Variable*> needSpilling = L2::coloring(g, tempF);
+        if (needSpilling.size() == 0){
+          all_colored = true;
+        }
+        else{
+          for (L2::Variable* var : needSpilling){
+            std::string prefix = pre + std::to_string(count);
+            tempF = L2::spillVar(var->name, prefix, tempF);
+            count += 100;
+          }
+          in_out = L2::liveness_analysis(tempF);
+          in = in_out.first;
+          out = in_out.second;
+          g = L2::generateGraph(in, out, tempF);
+          needSpilling = L2::coloring(g, tempF); 
+          all_colored = true;
+        }
+      }
+      
+      std::unordered_map<std::string, L2::Variable*>::iterator it = tempF.variables.begin();
+      while (it != tempF.variables.end()){
+        L2::Variable* var = (*it).second;
+        for (L2::Instruction* instruct : var->instructions){
+          for (int ii = 0; ii<instruct->operands.size(); ii++){
+            if (instruct->operands[ii] == var->name){
+              if(g.nodes.count(var) && g.nodes[var]->color < 15)
+                instruct->operands[ii] = gp_reg[g.nodes[var]->color];
+              else
+                instruct->operands[ii] = gp_reg[14];
+            }
+          }
+        }
+        it++;
+      }
+      L2::Function* tempF_p = new L2::Function();
+      tempF_p->name = tempF.name;
+      tempF_p->instructions = tempF.instructions;
+      tempF_p->arguments = tempF.arguments;
+      tempF_p->locals = tempF.locals;
+      newP.functions.push_back(tempF_p);
+      count = 0;
+    }
+
+
+      std::ofstream outputFile;
+      outputFile.open("prog.L1");
+
+      outputFile << "(" << newP.entryPointLabel << "\n";
+      for (L2::Function* f : newP.functions){
+        outputFile << "(" << f->name << "\n";
+        outputFile << std::to_string(f->arguments) << " " << std::to_string(f->locals) << "\n";
+        for (L2::Instruction* i : f->instructions) {
+          if (i->inst == L2::STACK){
+            outputFile << i->operands[0] << "<- mem rsp " << std::to_string((f->locals * 8) + (std::stoi(i->operands[2])));
+          }
+          else {
+            for (std::string op : i->operands){
+              outputFile << op << " ";
+            }
+          }
+          outputFile << "\n";
+        }
+        outputFile << ")\n";
+      }
+      outputFile << ")";
+
+      outputFile.close();
+
+
   }
 
   return 0;

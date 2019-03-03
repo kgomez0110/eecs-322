@@ -14,11 +14,11 @@
     :testFunction_ret
     return
   )
-
   (:testFunction
     7 0
     rdi <- mem rsp 0
     call print 1
     return
   )
+
 )

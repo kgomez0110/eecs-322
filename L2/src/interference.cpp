@@ -5,6 +5,7 @@
 #include <utility>
 #include <iostream>
 #include <algorithm>
+#include <stack>
 
 #include <L2.h>
 #include <interference.h>
@@ -59,7 +60,7 @@ namespace L2 {
     }
   }
 
-  void addGPs(std::vector<std::string> gp, Graph &g, Function f){
+  void addGPs(std::vector<std::string> gp, Graph &g, Function &f){
     int64_t num_reg = gp.size();
     Variable* second_reg;
     Variable* reg;
@@ -79,7 +80,7 @@ namespace L2 {
     }
   }
 
-  void addShift(std::vector<std::string> gp, Variable* var, Graph &g, Function f){
+  void addShift(std::vector<std::string> gp, Variable* var, Graph &g, Function &f){
     int64_t num_reg = gp.size();
     Variable* reg;
     for (int ii = 0; ii < num_reg-1; ii++){
@@ -93,7 +94,7 @@ namespace L2 {
     }
   }
 
-  Graph generateGraph(std::vector<std::set<Variable*>> in, std::vector<std::set<Variable*>> out, Function f){
+  Graph generateGraph(std::vector<std::set<Variable*>> in, std::vector<std::set<Variable*>> out, Function &f){
     Graph g;
     addGPs(gp_reg, g, f);
     int64_t num_instructions = in.size();
@@ -106,11 +107,77 @@ namespace L2 {
         addShift(no_rcx, v, g, f);
       }
     }
+    std::unordered_map<Variable*, Node*>::iterator it = g.nodes.begin();
+    while (it != g.nodes.end()){
+      (*it).second->degree = (*it).second->neighbors.size();
+      it++;
+    }
     return g;
-    
+  }
 
+  
 
+  bool sortDegreeAscending(Node* a, Node* b){
+    return a->degree < b->degree;
+  }
 
+  bool sortDegreeDescending(Node* a, Node* b){
+    return a->degree > b->degree;
+  }
+
+  std::stack<Node*> orderedNodes(Graph &g){
+    std::vector<Node*> nodes;
+    std::stack<Node*> nodeStack;
+    std::unordered_map<Variable*, Node*>::iterator it = g.nodes.begin();
+    while (it != g.nodes.end()){
+      nodes.push_back((*it).second);
+      it++;
+    }
+    std::sort(nodes.begin(), nodes.end(), sortDegreeAscending);
+    int index = 0;
+    while (index < nodes.size() && nodes[index]->degree < 15){
+      index++;
+    }
+    std::sort(nodes.begin()+index, nodes.end(), sortDegreeDescending);
+    for (int ii = nodes.size()-1; ii>=0; ii--){
+      nodeStack.push(nodes[ii]);
+    }
+    return nodeStack;
+  }
+
+  void colorRegisters(Graph &g, Function &f){
+    for (int ii = 0; ii<15; ii++){
+      g.nodes[f.variables[gp_reg[ii]]]->color = ii;
+    }
+  }
+
+  std::vector<Variable*> coloring (Graph &g, Function &f){
+    std::vector<Variable*> spilling = {};
+    colorRegisters(g, f);
+    std::stack<Node*> nodeStack = orderedNodes(g);
+    Node* temp;
+    while (!nodeStack.empty()){
+      temp = nodeStack.top();
+      if (temp->color == 15){
+        for (int ii = 0; ii < 14; ii++){
+          std::set<Node*>::iterator it = temp->neighbors.begin();
+          while (it != temp->neighbors.end()){
+            if ((*it)->color == ii)
+              break;
+            it++;
+          }
+          if (it == temp->neighbors.end()){
+            temp->color = ii;
+            break;
+          }
+        }
+      }
+      if (temp->color == 15){
+        spilling.push_back(temp->var);
+      }
+      nodeStack.pop();
+    }
+    return spilling;
   }
 
 

@@ -309,7 +309,7 @@ namespace L2 {
     pegtl::seq<
       register_rule,
       seps,
-      move,
+      operator_rule,
       seps,
       t_rule,
       seps,
@@ -411,6 +411,7 @@ namespace L2 {
   struct Instruction_rule:
     pegtl::sor<
       pegtl::seq< pegtl::at<Instruction_return_rule>, Instruction_return_rule>,
+      pegtl::seq< pegtl::at<Instruction_inc_dec_rule>, Instruction_inc_dec_rule>,
       pegtl::seq< pegtl::at<Instruction_mem_left_rule>, Instruction_mem_left_rule>,
       pegtl::seq< pegtl::at<Instruction_mem_right_rule>, Instruction_mem_right_rule>,
       pegtl::seq< pegtl::at<Instruction_cjump2_rule>, Instruction_cjump2_rule>,
@@ -419,7 +420,6 @@ namespace L2 {
       pegtl::seq< pegtl::at<Instruction_call_runtime_rule>, Instruction_call_runtime_rule>,
       pegtl::seq< pegtl::at<Instruction_call_rule>, Instruction_call_rule>,
       pegtl::seq< pegtl::at<Instruction_stack_arg_rule>, Instruction_stack_arg_rule>,
-      pegtl::seq< pegtl::at<Instruction_inc_dec_rule>, Instruction_inc_dec_rule>,
       pegtl::seq< pegtl::at<Instruction_at_rule>, Instruction_at_rule>,
       pegtl::seq< pegtl::at<Instruction_cmp_rule>, Instruction_cmp_rule>,
       pegtl::seq< pegtl::at<Instruction_three_op_rule>, Instruction_three_op_rule>,
@@ -511,7 +511,7 @@ namespace L2 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
         if (p.entryPointLabel.empty()){
-          p.entryPointLabel = "_" + in.string().substr(1);
+          p.entryPointLabel = in.string();
         } else {
           abort();
         }
@@ -522,7 +522,7 @@ namespace L2 {
     template< typename Input >
 	  static void apply( const Input & in, Program & p){
       auto newF = new Function();
-      newF->name = "_" + in.string().substr(1);
+      newF->name = in.string();
       p.functions.push_back(newF);
     }
   };
@@ -755,9 +755,17 @@ namespace L2 {
       auto currentF = p.functions.back();
       auto i = new Instruction(parsed_registers, L2::OTHER);
       int64_t num_args = std::stoi(parsed_registers[2]);
-      for (int ii = 0; ii < num_args; ii++){
-        addVarGen(arguments[ii], currentF, i);
+      if (num_args >= arguments.size()){
+        for (int ii = 0; ii < arguments.size(); ii++){
+         addVarGen(arguments[ii], currentF, i);
+       } 
       }
+      else {
+        for (int ii = 0; ii < num_args; ii++){
+          addVarGen(arguments[ii], currentF, i);
+        }
+      }
+      
       addVarGen(parsed_registers[1], currentF, i);
       for (std::string reg : caller_save){
         addVarKill(reg, currentF, i);
@@ -823,21 +831,27 @@ namespace L2 {
   template<> struct action < Instruction_three_op_rule > {
     template< typename Input >
 	  static void apply( const Input & in, Program & p){
-      auto currentF = p.functions.back();
-      auto i = new Instruction(parsed_registers, L2::OTHER);
-      std::string op = parsed_registers[1];
-      if (op != "<-"){
-        addVarGenKill(parsed_registers[0], currentF, i);
+      if (parsed_registers[1] == "<-" && (parsed_registers[0] == parsed_registers[2])){
+        parsed_registers = {}; 
       }
       else{
-        addVarKill(parsed_registers[0], currentF, i);
+        auto currentF = p.functions.back();
+        auto i = new Instruction(parsed_registers, L2::OTHER);
+        std::string op = parsed_registers[1];
+        if (op != "<-"){
+          addVarGenKill(parsed_registers[0], currentF, i);
+        }
+        else{
+          addVarKill(parsed_registers[0], currentF, i);
+        }
+        addVarGen(parsed_registers[2], currentF, i);
+        if ((op == "<<=" || op == ">>=") && isVar(parsed_registers[2])){
+          i->inst = L2::SOPSX;
+        }
+        currentF->instructions.push_back(i);
+        parsed_registers = {};
       }
-      addVarGen(parsed_registers[2], currentF, i);
-      if ((op == "<<=" || op == ">>=") && isVar(parsed_registers[2])){
-        i->inst = L2::SOPSX;
-      }
-      currentF->instructions.push_back(i);
-      parsed_registers = {}; 
+      
     }
   };
   

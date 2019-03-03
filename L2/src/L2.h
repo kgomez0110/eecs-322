@@ -21,7 +21,8 @@ namespace L2 {
   struct Variable {
     std::string name;
     std::vector<Instruction*> instructions;
-    Variable(std::string n) : name(n) { }
+    int color;
+    Variable(std::string n) : name(n), color(15) { }
   };
 
 
