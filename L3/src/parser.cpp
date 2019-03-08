@@ -47,6 +47,12 @@ namespace L3 {
       name
     > {};
 
+  struct var_copy:
+    pegtl::seq<
+      pegtl::one<'%'>,
+      name
+    > {};
+
   struct number:
     pegtl::seq<
       pegtl::opt<
@@ -60,6 +66,19 @@ namespace L3 {
       >
     >{};
 
+  struct number_copy:
+    pegtl::seq<
+      pegtl::opt<
+        pegtl::sor<
+          pegtl::one< '-' >,
+          pegtl::one< '+' >
+        >
+      >,
+      pegtl::plus< 
+        pegtl::digit
+      >
+    >{};
+    
   struct comment: 
     pegtl::disable< 
       TAOCPP_PEGTL_STRING( "//" ), 
@@ -164,10 +183,28 @@ namespace L3 {
       label
     > {};
   
+  struct function_call:
+      pegtl::seq<
+        pegtl::one<':'>,
+        name
+      > {};
+  
+  struct function_u_rule:
+    pegtl::sor<
+      var,
+      function_call
+    > {};
+
   struct t_rule:
     pegtl::sor<
       var,
       number
+    > {};
+
+  struct t_rule_copy:
+    pegtl::sor<
+      var_copy,
+      number_copy
     > {};
 
   struct s_rule:
@@ -178,7 +215,7 @@ namespace L3 {
 
   struct callee_rule:
     pegtl::sor<
-      u_rule,
+      function_u_rule,
       print,
       allocate,
       array_error
@@ -192,8 +229,8 @@ namespace L3 {
         var,
         seps,
         pegtl::plus< pegtl::one<','>, seps, var, seps>
-      >
-    > {};
+        >
+      > {};
 
   struct args:
     pegtl::sor<
@@ -205,7 +242,7 @@ namespace L3 {
         pegtl::plus< pegtl::one<','>, seps, t_rule, seps>
       >
     > {};
-  
+
   struct Instruction_move_rule :
     pegtl::seq<
       var,
@@ -301,9 +338,7 @@ namespace L3 {
       callee_rule,
       seps,
       pegtl::one<'('>,
-      seps,
       args,
-      seps,
       pegtl::one<')'>
     > {};
   
@@ -318,9 +353,7 @@ namespace L3 {
       callee_rule,
       seps,
       pegtl::one<'('>,
-      seps,
       args,
-      seps,
       pegtl::one<')'>
     > {};
 
@@ -348,7 +381,7 @@ namespace L3 {
     > {};
 
   struct Function_vars:
-    vars { };
+    pegtl::opt<vars> { };
   struct Function_rule:
     pegtl::seq<
       define,
@@ -436,6 +469,16 @@ namespace L3 {
     }
   };
 
+  // template<> struct action < function_call > {
+  //   template < typename Input >
+  //   static void apply(const Input & in, Program & p){
+  //     Item i;
+  //     i.isVar = false;
+  //     i.value = in.string();
+  //     items.push_back(i);
+  //   }
+  // };
+
   template<> struct action < number > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -466,12 +509,44 @@ namespace L3 {
       }
   };
 
+  template<> struct action < print > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+        Item i;
+        i.isVar = false;
+        i.value = in.string();
+        items.push_back(i);
+      }
+  };
+
+  template<> struct action < allocate > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+        Item i;
+        i.isVar = false;
+        i.value = in.string();
+        items.push_back(i);
+      }
+  };
+
+  template<> struct action < array_error > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+        Item i;
+        i.isVar = false;
+        i.value = in.string();
+        items.push_back(i);
+      }
+  };
+
+  
+
   // return t
   template<> struct action < Instruction_return_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_Return_T(items[0], line);
+      auto instruct = new Instruction(RETURN_T, items, line);
       if (items[0].isVar){
         instruct->gen.insert(items[0].var);
         items[0].var->instructions.push_back(instruct);
@@ -487,7 +562,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){ 
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_Return(line);
+      auto instruct = new Instruction(RETURN, items, line);
       currentF->instructions.push_back(instruct);
       line++;
     }
@@ -498,11 +573,17 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      std::vector<Item>::iterator it = items.begin() + 2;
-      std::vector<Item> arguments(it, items.end());
-      auto instruct = new Instruction_var_call(items[0], items[1], arguments, line);
+      Instruction* instruct;
+      if (items[1].value == "print" || items[1].value == "allocate" || items[1].value == "array-error"){
+        instruct = new Instruction(VAR_CALL_RUNTIME, items, line);
+      }
+      else{
+        instruct = new Instruction(VAR_CALL, items, line);
+      }
       instruct->kill.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
+      std::vector<Item>::iterator it = items.begin() + 1;
+      std::vector<Item> arguments(it, items.end());
       for (Item ii : arguments){
         if (ii.isVar){
           instruct->gen.insert(ii.var);
@@ -520,9 +601,15 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
+      Instruction* instruct;
+      if (items[1].value == "print" || items[1].value == "allocate" || items[1].value == "array-error"){
+        instruct = new Instruction(CALL_RUNTIME, items, line);
+      }
+      else{
+        instruct = new Instruction(CALL, items, line);
+      }
       std::vector<Item>::iterator it = items.begin() + 1;
       std::vector<Item> arguments(it, items.end());
-      auto instruct = new Instruction_call(items[0], arguments, line);
       for (Item ii : arguments){
         if (ii.isVar){
           instruct->gen.insert(ii.var);
@@ -540,7 +627,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_br_var(items[0], items[1], line);
+      auto instruct = new Instruction(BR_VAR, items, line);
       instruct->gen.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
       currentF->instructions.push_back(instruct);
@@ -554,7 +641,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_br(items[0], line);
+      auto instruct = new Instruction(BR, items, line);
       currentF->instructions.push_back(instruct);
       line++;
       items = {};
@@ -566,7 +653,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_load(items[0], items[1], line);
+      auto instruct = new Instruction(LOAD, items, line);
       instruct->kill.insert(items[0].var);
       instruct->gen.insert(items[1].var);
       items[0].var->instructions.push_back(instruct);
@@ -582,7 +669,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_store(items[0], items[1], line);
+      auto instruct = new Instruction(STORE, items, line);
       instruct->gen.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
       if (items[1].isVar){
@@ -600,7 +687,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_op(items[0], items[1], items[2], items[3], line);
+      auto instruct = new Instruction(THREE_OP, items, line);
       instruct->kill.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
       if (items[1].isVar){
@@ -622,7 +709,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_cmp(items[0], items[1], items[2], items[3], line);
+      auto instruct = new Instruction(CMP, items, line);
       instruct->kill.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
       if (items[1].isVar){
@@ -644,7 +731,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_move(items[0], items[1], line);
+      auto instruct = new Instruction(MOVE, items, line);
       instruct->kill.insert(items[0].var);
       items[0].var->instructions.push_back(instruct);
       if (items[1].isVar){
@@ -662,7 +749,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      Instruction_label* instruct = new Instruction_label(items[0], line);
+      auto instruct = new Instruction(LABEL, items, line);
       currentF->instructions.push_back(instruct);
       line++;
       items = {};

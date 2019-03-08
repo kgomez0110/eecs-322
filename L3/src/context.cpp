@@ -31,6 +31,7 @@ namespace L3 {
         c = new Context();
       }
     }
+    f->contexts.push_back(c);
     for (int ii = 0; ii<f->contexts.size(); ii++){
       if (f->contexts[ii]->instructions.empty()){
         f->contexts.erase(f->contexts.begin() + ii);
@@ -38,78 +39,14 @@ namespace L3 {
     }
   }
 
-  void addEachTile(std::vector<Tile*> &tiles){
-    tiles.push_back(new ReturnTileT());
-    tiles.push_back(new ReturnTile());
-    tiles.push_back(new MoveTile());
-    tiles.push_back(new CalleeTile());
-    tiles.push_back(new SaveCalleeTile());
-    tiles.push_back(new GotoTile());
-    tiles.push_back(new CjumpTile());
-    tiles.push_back(new LoadTile());
-    tiles.push_back(new StoreTile());
-    tiles.push_back(new MultiplyTile());
-    tiles.push_back(new AddTile());
-    tiles.push_back(new SubtractTile());
-    tiles.push_back(new AndTile());
-    tiles.push_back(new LessThanEqualTile());
-    tiles.push_back(new LessThanTile());
-    tiles.push_back(new EqualTile());
-    tiles.push_back(new GreaterThanEqualTile());
-    tiles.push_back(new GreaterThanTile()); 
-  }
-
 
   std::vector<Tile*> generateTiles(Function* f){
     createContexts(f);
     std::vector<Context*> contexts = f->contexts;
-    std::vector<Tile*> tiles;
-    addEachTile(tiles);
     std::vector<Tile*> function_tiles;
-    int num_tiles = tiles.size();
     for (Context* c : contexts) {
       for (Instruction* i : c->instructions) {
-        for (int jj = 0; jj < num_tiles; jj++){
-          if (tiles[jj]->match(i->tree)) {
-            function_tiles.push_back(tiles[jj]);
-            if (jj == 0)
-              tiles[jj] = new ReturnTileT();
-            else if (jj == 1)
-              tiles[jj] = new ReturnTile();
-            else if (jj == 2)
-              tiles[jj] = new MoveTile();
-            else if (jj == 3)
-              tiles[jj] = new CalleeTile();
-            else if (jj == 4)
-              tiles[jj] = new SaveCalleeTile();
-            else if (jj == 5)
-              tiles[jj] = new GotoTile();
-            else if (jj == 6)
-              tiles[jj] = new CjumpTile();
-            else if (jj == 7)
-              tiles[jj] = new LoadTile();
-            else if (jj == 8)
-              tiles[jj] = new StoreTile();
-            else if (jj == 9)
-              tiles[jj] = new MultiplyTile();
-            else if (jj == 10)
-              tiles[jj] = new AddTile();
-            else if (jj == 11)
-              tiles[jj] = new LessThanEqualTile();
-            else if (jj == 12)
-              tiles[jj] = new LessThanTile();
-            else if (jj == 13)
-              tiles[jj] = new EqualTile();
-            else if (jj == 14)
-              tiles[jj] = new GreaterThanEqualTile();
-            else if (jj == 15)
-              tiles[jj] = new GreaterThanTile();
-            break;
-          }
-        }
-      }
-      for (int ii = 0; ii<num_tiles; ii++){
-        delete tiles[ii];
+        function_tiles.push_back(new Tile(i->tree));
       }
     }
     return function_tiles;
@@ -134,6 +71,7 @@ namespace L3 {
       std::vector<Tile*> tiles = generateTiles(f);
       for (Tile* t : tiles){
         outputFile << t->toL2() << "\n";
+        
       }
       outputFile << ")\n";
     }
