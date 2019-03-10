@@ -14,7 +14,8 @@
 #include <fstream>
 
 #include <parser.h>
-#include <context.h>
+
+
 
 
 using namespace std;
@@ -63,7 +64,31 @@ int main(
     }
   }
 
+  std::vector<std::string> arguments = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+
   L3::Program p = L3::parse_file(argv[optind]);
-  L3::codeGenerator(p);
+  std::ofstream outputFile;
+  outputFile.open("prog.L2");
+  outputFile << "(:main\n";
+  for (L3::Function* f : p.functions) {
+    // function prelogue. making arguments and stuff
+    outputFile << "(" + f->name << "\n" << std::to_string(f->arguments.size()) << " 0\n";
+    for (int ii = 0; ii<f->arguments.size(); ii++) {
+      if (ii < 6) {
+        outputFile << f->arguments[ii].value << " <- " << arguments[ii] << "\n";
+      }
+      else {
+        outputFile << f->arguments[ii].value << " <- stack-arg " << std::to_string((ii-6) * 8) << "\n";
+      }
+    }
+
+    for (L3::Instruction* i : f->instructions) {
+      outputFile << i->toL2() << "\n";
+    }
+
+    outputFile << ")\n";
+  }
+  outputFile << ")";
+  outputFile.close();
   return 0;
 }

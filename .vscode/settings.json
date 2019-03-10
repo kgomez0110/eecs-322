@@ -59,6 +59,8 @@
     "unordered_map": "cpp",
     "utility": "cpp",
     "deque": "cpp",
-    "stack": "cpp"
+    "stack": "cpp",
+    "clocale": "cpp",
+    "iomanip": "cpp"
   }
 }

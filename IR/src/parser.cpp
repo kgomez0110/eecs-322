@@ -94,6 +94,7 @@ namespace IR {
   struct new_key : TAOCPP_PEGTL_STRING("new") {};
   struct array : TAOCPP_PEGTL_STRING("Array") {};
   struct tuple : TAOCPP_PEGTL_STRING("Tuple") {};
+  struct type_tuple : TAOCPP_PEGTL_STRING("tuple") {};
   struct int_type : TAOCPP_PEGTL_STRING("int64") {};
   struct code : TAOCPP_PEGTL_STRING("code") {};
   struct move : TAOCPP_PEGTL_STRING("<-") {};
@@ -130,16 +131,37 @@ namespace IR {
       name
     > {};
 
+  
+  
+  struct array_declare_rule :
+    pegtl::plus<
+      pegtl::seq<
+        pegtl::one<'['>,
+        seps,
+        pegtl::one<']'>
+      >
+    >{};
+
   struct type_rule :
     pegtl::sor<
       int_type,
-      tuple,
+      type_tuple,
       code
+    > {};
+
+  struct full_type_rule :
+    pegtl::sor<
+      pegtl::seq<
+        type_rule,
+        seps,
+        array_declare_rule
+      >,
+      type_rule
     > {};
 
   struct big_type_rule :
     pegtl::sor<
-      type_rule,
+      full_type_rule,
       void_key
     > {};
 
@@ -192,7 +214,16 @@ namespace IR {
     pegtl::seq<
       var,
       seps,
-      pegtl::plus<pegtl::one<'['>, seps, t_rule, seps, pegtl::one<']'>, seps>
+      pegtl::plus<
+        pegtl::seq<
+          pegtl::one<'['>, 
+          seps, 
+          t_rule, 
+          seps, 
+          pegtl::one<']'>, 
+          seps
+        >
+      >
     > {};
   struct Instruction_return_rule :
     str_return {};
@@ -224,7 +255,7 @@ namespace IR {
   
   struct Instruction_declare_var_rule :
     pegtl::seq<
-      type_rule,
+      full_type_rule,
       seps,
       var
     > {};
@@ -266,7 +297,7 @@ namespace IR {
       seps,
       move,
       seps,
-      var
+      t_rule
     > {};
 
   struct Instruction_get_length_rule :
@@ -312,6 +343,8 @@ namespace IR {
     pegtl::seq<
       var,
       seps,
+      move,
+      seps,
       new_key,
       seps,
       array,
@@ -324,6 +357,8 @@ namespace IR {
   struct Instruction_make_tuple_rule :
     pegtl::seq<
       var,
+      seps,
+      move,
       seps,
       new_key,
       seps,
@@ -628,6 +663,49 @@ namespace IR {
     }
   };
 
+  // var <- new Array(args)
+  template<> struct action < Instruction_make_array_rule > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_make_array(items);
+      currentF->instructions.push_back(inst);
+      items = {};
+    }
+  };
+
+  // var <- new Tuple(arg)
+  template<> struct action < Instruction_make_tuple_rule > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_make_array(items);
+      currentF->instructions.push_back(inst);
+      items = {};
+    }
+  };
+
+  // var <- var[t]*
+  template<> struct action < Instruction_load_array_rule > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_load_array(items);
+      currentF->instructions.push_back(inst);
+      items = {};
+    }
+  };
+
+  // var[t]* <- var
+  template<> struct action < Instruction_store_array_rule > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_store_array(items);
+      currentF->instructions.push_back(inst);
+      items = {};
+    }
+  };
 
 
 

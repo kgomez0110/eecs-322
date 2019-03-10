@@ -11,7 +11,6 @@ namespace IR {
   struct Instruction;
   struct Program;
   struct Item;
-  struct Array;
 
   struct Program {
     std::vector<Function*> functions;
@@ -22,7 +21,6 @@ namespace IR {
     std::string type;
     std::vector<Instruction*> instructions;
     std::vector<Item> arguments;
-    std::unordered_map<std::string, Array*> arrays;
   };
 
   struct Instruction {
@@ -31,16 +29,6 @@ namespace IR {
 
   struct Item {
     std::string value;
-  };
-
-  struct Array {
-    std::vector<int> dimensions;
-  //  std::string getIndex(){};
-    Array(std::vector<Item> items) {
-      for (Item ii : items){
-        this->dimensions.push_back(std::stoi(ii.value));
-      }
-    }
   };
 
 
@@ -164,17 +152,121 @@ namespace IR {
 
   // var <- var[t]*
   struct Instruction_load_array : Instruction {
-
+    Item var1, array;
+    std::vector<Item> dimensions;
     std::string toL3() {
-      return "";
+      int offset = 16 + (dimensions.size() * 8);
+      std::vector<std::string> size_address;
+      std::vector<std::string> sizes;
+      std::vector<std::string> new_vars;
+      std::string address_var = "%ADDR_";
+      std::string size_var = "%SIZE_";
+      std::string new_var = "%newVar_";
+      std::string final_address = "%final_addy";
+      std::string offset_var = "%Offset";
+      std::string result = "";
+      for (int ii = 0; ii<dimensions.size(); ii++){
+        size_address.push_back(address_var + std::to_string(ii));
+        sizes.push_back(size_var + std::to_string(ii));
+        new_vars.push_back(new_var + std::to_string(ii));
+      }
+
+      // grabs the size of each dimension and loads them into the size vars
+      for (int ii = 0; ii<dimensions.size()-1; ii++){
+        int size_offset = 16 + (8*(1+ii)); // the location in memory the size of the dimensions is stored
+        result.append(size_address[ii] + " <- " + array.value + " + " + std::to_string(size_offset) + "\n");
+        result.append(sizes[ii] + " <- load " + size_address[ii] + "\n");
+        result.append(sizes[ii] + " <- " + sizes[ii] + " >> 1\n");
+      }
+
+      for (int ii = dimensions.size()-1; ii>=0; ii--) {
+        if (ii == dimensions.size() - 1) {
+          result.append(final_address + " <- " + dimensions[ii].value + "\n");
+        }
+        else {
+          result.append(new_var[ii] + " <- " + dimensions[ii].value + "\n");
+          for (int jj = ii+1; jj<dimensions.size(); jj++){
+            result.append(new_var[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
+          }
+          result.append(final_address + " <- " + final_address + " + " + new_vars[ii] + "\n");
+        }
+      }
+
+      result.append(final_address + " <- " + final_address + " * 8\n");
+      result.append(final_address + " <- " + final_address + " + " + std::to_string(offset) + "\n");
+      result.append(final_address + " <- " + final_address + " + " + array.value + "\n");
+      
+      result.append(var1.value + " <- load " + final_address);
+      return result;
+    }
+
+    Instruction_load_array(std::vector<Item> args) {
+      this->var1 = args[0];
+      this->array = args[1];
+      for (int ii = 2; ii<args.size(); ii++){
+        this->dimensions.push_back(args[ii]);
+      }
     }
   };
 
   // var[t]* <- var
   struct Instruction_store_array : Instruction {
+    Item var1, array;
+    std::vector<Item> dimensions;
 
     std::string toL3() {
-      return "";
+      int offset = 16 + (dimensions.size() * 8);
+      std::vector<std::string> size_address;
+      std::vector<std::string> sizes;
+      std::vector<std::string> new_vars;
+      std::string address_var = "%ADDR_";
+      std::string size_var = "%SIZE_";
+      std::string new_var = "%newVar_";
+      std::string final_address = "%final_addy";
+      std::string offset_var = "%Offset";
+      std::string result = "";
+      for (int ii = 0; ii<dimensions.size(); ii++){
+        size_address.push_back(address_var + std::to_string(ii));
+        sizes.push_back(size_var + std::to_string(ii));
+        new_vars.push_back(new_var + std::to_string(ii));
+      }
+
+      // grabs the size of each dimension and loads them into the size vars
+      for (int ii = 0; ii<dimensions.size()-1; ii++){
+        int size_offset = 16 + (8*(1+ii)); // the location in memory the size of the dimensions is stored
+        result.append(size_address[ii] + " <- " + array.value + " + " + std::to_string(size_offset) + "\n");
+        result.append(sizes[ii] + " <- load " + size_address[ii] + "\n");
+        result.append(sizes[ii] + " <- " + sizes[ii] + " >> 1\n");
+      }
+
+      for (int ii = dimensions.size()-1; ii>=0; ii--) {
+        if (ii == dimensions.size() - 1) {
+          result.append(final_address + " <- " + dimensions[ii].value + "\n");
+        }
+        else {
+          result.append(new_var[ii] + " <- " + dimensions[ii].value + "\n");
+          for (int jj = ii+1; jj<dimensions.size(); jj++){
+            result.append(new_var[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
+          }
+          result.append(final_address + " <- " + final_address + " + " + new_vars[ii] + "\n");
+        }
+      }
+
+      result.append(final_address + " <- " + final_address + " * 8\n");
+      result.append(final_address + " <- " + final_address + " + " + std::to_string(offset) + "\n");
+      result.append(final_address + " <- " + final_address + " + " + array.value + "\n");
+      
+      result.append("store " + final_address + " <- " + var1.value);
+      return result;
+
+    }
+
+    Instruction_store_array(std::vector<Item> args) {
+      this->var1 = args[args.size()-1];
+      this->array = args[0];
+      for (int ii = 1; ii<args.size()-1; ii++){
+        this->dimensions.push_back(args[ii]);
+      }
     }
   };
 
@@ -197,28 +289,52 @@ namespace IR {
       return prefix + std::to_string(count);
     }
     std::string toL3() {
-      std::string arg_temp = "%dkljfkjafeifhew";
+      std::string arg_temp = "%pd";
       int arg_counter = 0;
       int temp_counter = 0;
-      std::string temp = "%dslfjsdjflsdjf";
+      std::string temp = "%vd";
       std::string result = "";
-      std::string v0 = makeVar(temp, temp_counter)
+      std::string v0 = makeVar(temp, temp_counter);
+      // save # of dimensions for 1st argument
       result.append(v0 + " <- " + args[0].value + " >> 1\n");
+      // for the rest of the dimensions, multiply it to get total size
       for (int ii = 1; ii<args.size(); ii++){
         std::string pd = makeVar(arg_temp, arg_counter);
         result.append(pd + " <- " + args[ii].value + " >> 1\n");
         result.append(v0 + " <- " + v0 + " * " + pd + "\n");
       }
       result.append(v0 + " <- " + v0 + " << 1\n");
-      result.append(v0 + " <- " + v0 + " 1\n");
-  };
+      result.append(v0 + " <- " + v0 + " + 1\n");
+      // this now has enough space for all the elements, plus 1 space to stroe # of dimensions and stores each of those dimensions
+      result.append(v0 + " <- " + v0 + " + " + std::to_string((args.size()+1)*2) + "\n");
+      
+      std::string a = makeVar(temp, temp_counter); // this is gonna be the array
+      result.append(a + " <- call allocate(" + v0 + ", 1)\n");
+      std::string v1 = makeVar(temp, temp_counter);
+      result.append(v1 + " <- " + a + " + 8\n");
 
-  // var <- new Tuple(t);
-  struct Instruction_make_tuple : Instruction {
+      // this stores the number of dimensions
+      result.append("store " + v1 + " <- " + std::to_string((args.size()*2)+1) + "\n");
 
-    std::string toL3() {
-      return "";
-    } 
+      // stores each indiviudal dimension size
+      int dim = 16;
+      for (int ii = 0; ii<args.size(); ii++) {
+        std::string v2 = makeVar(temp, temp_counter);
+        result.append(v2 + " <- " + a + " + " + std::to_string(dim) + "\n");
+        result.append("store " + v2 + " <- " + args[ii].value + "\n");
+        dim += 8;
+      }
+
+      return result;
+    }
+
+    Instruction_make_array(std::vector<Item> items) {
+      this->var = items[0];
+      for (int ii = 1; ii <items.size(); ii++){
+        this->args.push_back(items[ii]);
+      }
+    }
+
   };
 
   // var <- s
@@ -233,7 +349,6 @@ namespace IR {
 
   // type var
   struct Instruction_declare_var : Instruction {
-
     std::string toL3() {
       return "";
     } 
