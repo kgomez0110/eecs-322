@@ -16,7 +16,7 @@ using namespace std;
 
 namespace L2 {
 
-  std::vector<std::string> gp_reg = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi", "r12", "r13", "r14", "r15", "rbp", "rbx"};
+  std::vector<std::string> gp_reg = {"rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "rax", "r12", "r13", "r14", "r15", "rbp", "rbx"};
   std::vector<std::string> no_rcx = {"r10", "r11", "r8", "r9", "rax", "rdi", "rdx", "rsi", "r12", "r13", "r14", "r15", "rbp", "rbx"};
   
   Variable* getVarFromSet(std::set<Variable*> s, int64_t index){

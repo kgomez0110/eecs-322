@@ -18,6 +18,7 @@ using namespace std;
 
 namespace L3 {
 
+
   struct name:
     pegtl::seq<
       pegtl::plus< 
@@ -248,7 +249,10 @@ namespace L3 {
       seps,
       move,
       seps,
-      function_s_rule
+      pegtl::sor<
+        Label_rule,
+        function_s_rule
+      >
     > {};
 
   struct Instruction_just_return_rule:
@@ -388,6 +392,7 @@ namespace L3 {
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       currentF->name = in.string();
+      p.function_names->push_back(currentF->name);
       items = {};
     }
   };
@@ -415,7 +420,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       Item i;
-      i.value = in.string() + "_" + p.functions.back()->name.substr(1);
+      i.value = in.string();
       items.push_back(i);
     }
   };
@@ -425,6 +430,9 @@ namespace L3 {
     static void apply( const Input & in, Program & p){
         Item i;
         i.value = in.string();
+        while (i.value[0] == '0' && i.value.size() > 1) {
+          i.value = i.value.substr(1);
+        }
         items.push_back(i);
       }
   };
@@ -441,10 +449,12 @@ namespace L3 {
   template<> struct action < callee_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
+      if(in.string()[0] != '%'){
         Item i;
         i.value = in.string();
         items.push_back(i);
       }
+    }
   };
 
   template<> struct action < cmp_rule > {
@@ -506,7 +516,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_br_var(items[0], items[1]);
+      auto instruct = new Instruction_br_var(items[0], items[1], p.function_names, currentF->name.substr(1));
       currentF->instructions.push_back(instruct);
       items = {};
     }
@@ -517,7 +527,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_br(items[0]);
+      auto instruct = new Instruction_br(items[0], p.function_names, currentF->name.substr(1));
       currentF->instructions.push_back(instruct);
       items = {};
     }
@@ -539,7 +549,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_store(items[0], items[1]);
+      auto instruct = new Instruction_store(items[0], items[1], p.function_names, currentF->name.substr(1));
       currentF->instructions.push_back(instruct);
       items = {};
     }
@@ -572,7 +582,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_move(items[0], items[1]);
+      auto instruct = new Instruction_move(items[0], items[1], p.function_names, currentF->name.substr(1));
       currentF->instructions.push_back(instruct);
       items = {};
     }
@@ -583,7 +593,7 @@ namespace L3 {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto instruct = new Instruction_label(items[0]);
+      auto instruct = new Instruction_label(items[0], currentF->name.substr(1));
       currentF->instructions.push_back(instruct);
       items = {};
     }
@@ -602,6 +612,7 @@ namespace L3 {
      */   
     file_input< > fileInput(fileName);
     Program p;
+    p.function_names = new std::vector<std::string>();
     parse< grammar, action >(fileInput, p);
 
     return p;

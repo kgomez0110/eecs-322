@@ -7,7 +7,7 @@
 #include <tao/pegtl/analyze.hpp>
 #include <tao/pegtl/contrib/raw_string.hpp>
 
-#include <IR.h>
+#include <LB.h>
 
 
 namespace pegtl = tao::TAO_PEGTL_NAMESPACE;
@@ -16,7 +16,7 @@ using namespace pegtl;
 using namespace std;
 
 
-namespace IR {
+namespace LB {
 
   struct name:
     pegtl::seq<
@@ -77,9 +77,7 @@ namespace IR {
   struct void_key : TAOCPP_PEGTL_STRING("void") {};
   struct len : TAOCPP_PEGTL_STRING("length") {};
   struct array_error : TAOCPP_PEGTL_STRING("array-error") {};
-  struct call : TAOCPP_PEGTL_STRING("call") {};
   struct br : TAOCPP_PEGTL_STRING("br") {};
-  struct define : TAOCPP_PEGTL_STRING("define") {};
   struct add : TAOCPP_PEGTL_STRING("+") {};
   struct sub : TAOCPP_PEGTL_STRING("-") {};
   struct mult : TAOCPP_PEGTL_STRING("*") {};
@@ -119,21 +117,14 @@ namespace IR {
   struct Number_rule :
     number {}; 
 
-  struct var :
-    pegtl::seq<
-      pegtl::one<'%'>,
-      name
-    > {};
 
-  struct var_copy :
-    pegtl::seq<
-      pegtl::one<'%'>,
-      name
-    > {};
+  struct Name_rule :
+    name {};
+  
+  struct Name_rule_copy :
+    name {};
 
-  
-  
-  struct array_declare_rule :
+    struct array_declare_rule :
     pegtl::plus<
       pegtl::seq<
         pegtl::one<'['>,
@@ -165,21 +156,11 @@ namespace IR {
       void_key
     > {};
 
-  struct u_rule :
-    pegtl::sor <
-      var,
-      Label_rule
-    > {};
 
-  struct u_rule_copy :
-    pegtl::sor <
-      var_copy,
-      label
-    > {};
 
   struct t_rule :
     pegtl::sor <
-      var,
+      Name_rule,
       Number_rule
     > {};
 
@@ -189,19 +170,7 @@ namespace IR {
       Label_rule
     > {};
 
-  struct callee_rule :
-    pegtl::sor<
-      u_rule_copy,
-      print,
-      array_error
-    > {};
 
-  struct vars_rule :
-      pegtl::seq<
-        var,
-        seps,
-        pegtl::opt<pegtl::plus<pegtl::one<','>, seps, var, seps>>
-      > {};
 
   struct args_rule :
     pegtl::seq<
@@ -211,18 +180,14 @@ namespace IR {
     > {};
 
   struct array_access_rule :
-    pegtl::seq<
-      var,
-      seps,
-      pegtl::plus<
-        pegtl::seq<
-          pegtl::one<'['>, 
-          seps, 
-          t_rule, 
-          seps, 
-          pegtl::one<']'>, 
-          seps
-        >
+    pegtl::plus<
+      pegtl::seq<
+        pegtl::one<'['>, 
+        seps, 
+        t_rule, 
+        seps, 
+        pegtl::one<']'>, 
+        seps
       >
     > {};
   struct Instruction_return_rule :
@@ -257,12 +222,12 @@ namespace IR {
     pegtl::seq<
       big_type_rule,
       seps,
-      var
+      Name_rule
     > {};
 
   struct Instruction_move_rule : 
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
       seps,
@@ -271,7 +236,7 @@ namespace IR {
   
   struct Instruction_op_rule :
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
       seps,
@@ -284,40 +249,42 @@ namespace IR {
 
   struct Instruction_load_array_rule :
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
+      seps,
+      Name_rule,
       seps,
       array_access_rule
     > {};
   
   struct Instruction_store_array_rule :
     pegtl::seq<
+      Name_rule,
+      seps,
       array_access_rule,
       seps,
       move,
       seps,
-      s_rule
+      Name_rule
     > {};
 
   struct Instruction_get_length_rule :
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
       seps,
       len,
       seps,
-      var,
+      Name_rule,
       seps,
       t_rule
     > {};
 
   struct Instruction_call_rule :
     pegtl::seq<
-      call,
-      seps,
-      callee_rule,
+      Name_rule,
       seps,
       pegtl::one<'('>,
       pegtl::opt<args_rule>,
@@ -326,13 +293,11 @@ namespace IR {
 
   struct Instruction_save_call_rule :
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
       seps,
-      call,
-      seps,
-      callee_rule,
+      Name_rule,
       seps,
       pegtl::one<'('>,
       pegtl::opt<args_rule>,
@@ -341,7 +306,7 @@ namespace IR {
 
   struct Instruction_make_array_rule :
     pegtl::seq<
-      var,
+      Name_rule,
       seps,
       move,
       seps,
@@ -356,9 +321,7 @@ namespace IR {
 
   struct Instruction_make_tuple_rule :
     pegtl::seq<
-      var,
-      seps,
-      move,
+      Name_rule,
       seps,
       new_key,
       seps,
@@ -376,23 +339,35 @@ namespace IR {
       Label_rule
     > {};
 
+  struct Instruction_print_rule:
+    pegtl::seq<
+      print,
+      seps,
+      pegtl::one<'('>,
+      seps,
+      t_rule,
+      seps,
+      pegtl::one<')'>
+    > {};
+
   struct Instruction_rule:
     pegtl::sor<
-      pegtl::seq< pegtl::at<Instruction_return_t_rule>, Instruction_return_t_rule>,
-      pegtl::seq< pegtl::at<Instruction_return_rule>, Instruction_return_rule>,
-      pegtl::seq< pegtl::at<Instruction_br_t_rule>, Instruction_br_t_rule>,
-      pegtl::seq< pegtl::at<Instruction_br_rule>, Instruction_br_rule>,
-      pegtl::seq< pegtl::at<Instruction_get_length_rule>, Instruction_get_length_rule>,
+      pegtl::seq< pegtl::at<Instruction_make_tuple_rule>, Instruction_make_tuple_rule>,      
+      pegtl::seq< pegtl::at<Instruction_make_array_rule>, Instruction_make_array_rule>,
+      pegtl::seq< pegtl::at<Instruction_print_rule>, Instruction_print_rule>, 
       pegtl::seq< pegtl::at<Instruction_save_call_rule>, Instruction_save_call_rule>,
       pegtl::seq< pegtl::at<Instruction_call_rule>, Instruction_call_rule>,
-      pegtl::seq< pegtl::at<Instruction_load_array_rule>, Instruction_load_array_rule>,
+      pegtl::seq< pegtl::at<Instruction_get_length_rule>, Instruction_get_length_rule>,
       pegtl::seq< pegtl::at<Instruction_store_array_rule>, Instruction_store_array_rule>,
+      pegtl::seq< pegtl::at<Instruction_load_array_rule>, Instruction_load_array_rule>,
+      pegtl::seq< pegtl::at<Instruction_br_t_rule>, Instruction_br_t_rule>,
+      pegtl::seq< pegtl::at<Instruction_br_rule>, Instruction_br_rule>,
+      pegtl::seq< pegtl::at<Instruction_label_rule>, Instruction_label_rule>,
       pegtl::seq< pegtl::at<Instruction_op_rule>, Instruction_op_rule>,
-      pegtl::seq< pegtl::at<Instruction_make_array_rule>, Instruction_make_array_rule>,
-      pegtl::seq< pegtl::at<Instruction_make_tuple_rule>, Instruction_make_tuple_rule>,
       pegtl::seq< pegtl::at<Instruction_move_rule>, Instruction_move_rule>,
       pegtl::seq< pegtl::at<Instruction_declare_var_rule>, Instruction_declare_var_rule>,
-      pegtl::seq< pegtl::at<Instruction_label_rule>, Instruction_label_rule>
+      pegtl::seq< pegtl::at<Instruction_return_t_rule>, Instruction_return_t_rule>,
+      pegtl::seq< pegtl::at<Instruction_return_rule>, Instruction_return_rule>
     > {};
 
   struct Instructions_rule:
@@ -404,41 +379,36 @@ namespace IR {
 
   struct type_var :
     pegtl::seq<
-      seps,
       big_type_rule,
       seps,
-      var
+      Name_rule
     > {};
   
-  struct type_vars:
+  struct Function_vars:
     pegtl::sor<
+      type_var,
+      seps,
       pegtl::seq<
         type_var,
         seps,
-        pegtl::opt<pegtl::plus<pegtl::one<','>, seps, type_var, seps>>
-      >,
-      seps
+        pegtl::plus<pegtl::one<'('>, seps, type_var, seps>
+      >
     > {};
 
-  struct Function_vars:
-    type_vars {};
-
   struct Function_name:
-    label {};
+    name {};
 
   struct Function_type:
     big_type_rule {};
 
   struct Function_rule:
     pegtl::seq<
-      define,
-      seps,
       Function_type,
       seps,
       Function_name,
       seps,
       pegtl::one<'('>,
-      pegtl::opt<Function_vars>,
+      Function_vars,
       pegtl::one<')'>,
       seps,
       pegtl::one<'{'>,
@@ -452,11 +422,12 @@ namespace IR {
       Function_rule,
       seps
     > {};
-
+  
   struct entry_point_rule:
     pegtl::seq<
       Functions_rule
     > {};
+
 
   struct grammar : 
     pegtl::must< 
@@ -464,24 +435,16 @@ namespace IR {
     > {};
   
   std::vector<Item> items;
-  std::unordered_map<std::string, bool> isTuple;
-
+  int array_access_counter = 0;
 
   template< typename Rule >
   struct action : pegtl::nothing< Rule > {};
-
-  template<> struct action < define > {
-    template< typename Input >
-    static void apply( const Input & in, Program & p){
-      auto newF = new Function();
-      p.functions.push_back(newF);
-    }
-  };
 
   template<> struct action < Function_name > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
+      p.function_names->push_back(in.string());
       currentF->name = in.string();
       items = {};
     }
@@ -492,14 +455,6 @@ namespace IR {
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
       currentF->arguments = items;
-      for (int ii = 0; ii<items.size(); ii+=2) {
-        if (items[ii].value == "tuple") {
-          isTuple[items[ii+1].value] = true;
-        }
-        else {
-          isTuple[items[ii+1].value] = false;
-        }
-      }
       items = {};
     }
   };
@@ -507,13 +462,14 @@ namespace IR {
   template<> struct action < Function_type > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
-      auto currentF = p.functions.back();
-      currentF->type = in.string();
+      auto newF = new Function();
+      newF->type = in.string();
+      p.functions.push_back(newF);
       items = {};
     }
   };
 
-  template<> struct action < var > {
+  template<> struct action < Name_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       Item i;
@@ -523,15 +479,6 @@ namespace IR {
   };
 
   template<> struct action < Label_rule > {
-    template< typename Input >
-    static void apply( const Input & in, Program & p){
-      Item i;
-      i.value = in.string();
-      items.push_back(i);
-    }
-  };
-
-  template<> struct action < callee_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       Item i;
@@ -560,7 +507,7 @@ namespace IR {
 
   template<> struct action < big_type_rule > {
     template< typename Input >
-    static void apply( const Input & in, Program & p) {
+    static void apply( const Input & in, Program & p){
       Item i;
       i.value = in.string();
       items.push_back(i);
@@ -622,29 +569,29 @@ namespace IR {
     }
   };
 
-  // var <- call callee (args)
+  // name <- name(args)
   template<> struct action < Instruction_save_call_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_save_call(items);
+      auto inst = new Instruction_save_call(items, p.function_names);
       currentF->instructions.push_back(inst);
       items = {};
     }
   };
 
-  // call callee (args)
+  // name(args)
   template<> struct action < Instruction_call_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_call(items);
+      auto inst = new Instruction_call(items, p.function_names);
       currentF->instructions.push_back(inst);
       items = {};
     }
   };
 
-  // var <- t op t
+  // name <- t op t
   template<> struct action < Instruction_op_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -655,7 +602,7 @@ namespace IR {
     }
   };
 
-  // var <- s
+  // name <- s
   template<> struct action < Instruction_move_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -666,24 +613,18 @@ namespace IR {
     }
   };
 
-  // type var
+  // type name
   template<> struct action < Instruction_declare_var_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
-      // auto currentF = p.functions.back();
-      // auto inst = new Instruction_move(items[0], items[1]);
-      // currentF->instructions.push_back(inst);
-      if (items[0].value == "tuple") {
-        isTuple[items[1].value] = true;
-      }
-      else {
-        isTuple[items[1].value] = false;
-      }
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_declare_var(items[0], items[1]);
+      currentF->instructions.push_back(inst);
       items = {};
     }
   };
 
-  // var <- length var t
+  // name <- length name t
   template<> struct action < Instruction_get_length_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -694,7 +635,7 @@ namespace IR {
     }
   };
 
-  // var <- new Array(args)
+  // name <- new Array(args)
   template<> struct action < Instruction_make_array_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -705,7 +646,7 @@ namespace IR {
     }
   };
 
-  // var <- new Tuple(arg)
+  // name <- new Tuple(args)
   template<> struct action < Instruction_make_tuple_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
@@ -716,40 +657,40 @@ namespace IR {
     }
   };
 
-  // var <- var[t]*
+  // name <- name([t])+ 
   template<> struct action < Instruction_load_array_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      if (isTuple[items[1].value]){
-        auto inst = new Instruction_load_tuple(items);
-        currentF->instructions.push_back(inst);
-      }
-      else {
-        auto inst = new Instruction_load_array(items);
-        currentF->instructions.push_back(inst);
-      }
+      auto inst = new Instruction_load_array(items, array_access_counter);
+      currentF->instructions.push_back(inst);
       items = {};
+      array_access_counter++;
     }
   };
 
-  // var[t]* <- var
+  // name([t])+ <- s
   template<> struct action < Instruction_store_array_rule > {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      if (isTuple[items[0].value]){
-        auto inst = new Instruction_store_tuple(items);
-        currentF->instructions.push_back(inst);
-      }
-      else {
-        auto inst = new Instruction_store_array(items);
-        currentF->instructions.push_back(inst);
-      }
+      auto inst = new Instruction_store_array(items, array_access_counter);
+      currentF->instructions.push_back(inst);
       items = {};
+      array_access_counter++;
     }
   };
 
+  // print(t)
+  template<> struct action < Instruction_print_rule > {
+    template< typename Input >
+    static void apply( const Input & in, Program & p){
+      auto currentF = p.functions.back();
+      auto inst = new Instruction_print(items[0]);
+      currentF->instructions.push_back(inst);
+      items = {};
+    }
+  };
 
   Program parse_file (char *fileName){
 
@@ -763,6 +704,7 @@ namespace IR {
      */   
     file_input< > fileInput(fileName);
     Program p;
+    p.function_names = new std::vector<std::string>();
     parse< grammar, action >(fileInput, p);
 
     return p;

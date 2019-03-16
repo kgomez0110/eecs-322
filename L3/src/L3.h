@@ -18,6 +18,7 @@ namespace L3 {
     std::string value;
   };
 
+
   struct Function {
     std::string name;
     std::vector<Instruction*> instructions;
@@ -26,10 +27,35 @@ namespace L3 {
 
   struct Program {
     std::vector<Function*> functions;
+    std::vector<std::string>* function_names;
   };
 
   struct Instruction {
     virtual std::string toL2() = 0;
+    std::vector<std::string>* f_names;
+    std::string function_name;
+    bool isLabel(Item i) {
+      return (i.value[0] == ':');
+    }
+    bool isFunction(Item i) {
+      std::vector<std::string> names = *(this->f_names);
+      return (std::find(names.begin(), names.end(), i.value) != names.end());
+    }
+
+    std::string convertLabel(Item i){
+      if (isLabel(i) && !isFunction(i)) {
+        return i.value + "_" + function_name;
+      }
+      else
+      {
+        return i.value;
+      }
+    }
+
+    std::string justConvert(Item i) {
+      return i.value + "_" + function_name;
+    }
+       
   };
 
   // return t
@@ -68,14 +94,7 @@ namespace L3 {
     std::string toL2() {
       std::string result = "";
       std::string ret_label = "";
-      if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
-        if (callee.value[0] == '%')
-          ret_label = ":" + callee.value.substr(1) + "_ret" + std::to_string(count);
-        else 
-          ret_label = callee.value + "_ret" + std::to_string(count);
-        result.append("mem rsp -8 <- " + ret_label + "\n");
-      }
-      for (int ii = 0; ii < this->args.size(); ii++) {
+      for (int ii = 0; ii < args.size(); ii++) {
         if (ii < 6) {
           result.append(arguments[ii] + " <- " + args[ii].value + "\n");
         }
@@ -84,6 +103,14 @@ namespace L3 {
           result.append("mem rsp -" + std::to_string(stack_offset) + " <- " + args[ii].value + "\n");
         }
       }
+      if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
+        if (callee.value[0] == '%')
+          ret_label = ":" + callee.value.substr(1) + "_ret" + std::to_string(count);
+        else 
+          ret_label = callee.value + "_ret" + std::to_string(count);
+        result.append("mem rsp -8 <- " + ret_label + "\n");
+      }
+      
       result.append("call " + callee.value + " " + std::to_string(args.size()) + "\n");
       if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
         result.append(ret_label + "\n");
@@ -111,13 +138,6 @@ namespace L3 {
     std::string toL2(){
       std::string result = "";
       std::string ret_label = "";
-      if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
-        if (callee.value[0] == '%')
-          ret_label = ":" + callee.value.substr(1) + "_ret" + std::to_string(count);
-        else 
-          ret_label = callee.value + "_ret" + std::to_string(count);
-        result.append("mem rsp -8 <- " + ret_label + "\n");
-      }
       for (int ii = 0; ii < this->args.size(); ii++) {
         if (ii < 6) {
           result.append(arguments[ii] + " <- " + args[ii].value + "\n");
@@ -126,6 +146,13 @@ namespace L3 {
           int stack_offset = ((args.size() - 5) - (ii-6)) * 8;
           result.append("mem rsp -" + std::to_string(stack_offset) + " <- " + args[ii].value + "\n");
         }
+      }
+      if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
+        if (callee.value[0] == '%')
+          ret_label = ":" + callee.value.substr(1) + "_ret" + std::to_string(count);
+        else 
+          ret_label = callee.value + "_ret" + std::to_string(count);
+        result.append("mem rsp -8 <- " + ret_label + "\n");
       }
       result.append("call " + callee.value + " " + std::to_string(args.size()) + "\n");
       if (callee.value != "print" && callee.value != "allocate" && callee.value != "array-error"){
@@ -148,10 +175,13 @@ namespace L3 {
     Item var, label;
 
     std::string toL2() {
-      return "cjump " + var.value + " = 1 " + label.value;
+      return "cjump " + var.value + " = 1 " + justConvert(label);
     }
 
-    Instruction_br_var(Item v, Item l) : var(v), label(l) {}
+    Instruction_br_var(Item v, Item l, std::vector<std::string>* names, std::string currName) : var(v), label(l) {
+      this->f_names = names;
+      this->function_name = currName;
+    }
   };
 
   // br label
@@ -159,10 +189,13 @@ namespace L3 {
     Item label;
     
     std::string toL2() {
-      return "goto " + label.value;
+      return "goto " + justConvert(label);
     }
 
-    Instruction_br(Item l) : label(l) {}
+    Instruction_br(Item l, std::vector<std::string>* names, std::string currName) : label(l) {
+      this->function_name = currName;
+      this->f_names = names;
+    }
   };
 
   // var <- load var
@@ -181,10 +214,13 @@ namespace L3 {
     Item var, s;
 
     std::string toL2() {
-      return "mem " + var.value + " 0 <- " + s.value;
+      return "mem " + var.value + " 0 <- " + convertLabel(s);
     }
 
-    Instruction_store(Item v, Item s1) : var(v), s(s1)  {}
+    Instruction_store(Item v, Item s1, std::vector<std::string>* names, std::string currName) : var(v), s(s1)  {
+      this->f_names = names;
+      this->function_name = currName;
+    }
   };
 
   // var <- t op t
@@ -231,36 +267,26 @@ namespace L3 {
     Item var, s;
 
     std::string toL2() {
-      return var.value + " <- " + s.value; 
+      return var.value + " <- " + convertLabel(s); 
     }
 
-    Instruction_move(Item v, Item s1) : var(v), s(s1) {};
+    Instruction_move(Item v, Item s1, std::vector<std::string>* names, std::string currName) : var(v), s(s1) {
+      this->f_names = names;
+      this->function_name = currName;
+    };
   };
 
   // label
   struct Instruction_label : Instruction {
     Item label;
+    std::string name;
 
     std::string toL2() {
-      return label.value;
+      return label.value + "_" + name;
     }
 
-    Instruction_label(Item l) : label(l) {}
+    Instruction_label(Item l, std::string n) : label(l) , name(n) {}
   };
-
-
-
-
-
-
-
-
-
-  
-
-
-
-
 
   
 }

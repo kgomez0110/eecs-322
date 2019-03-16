@@ -23,9 +23,9 @@ namespace L2 {
   std::string spill_var;
 
   std::vector<std::string> arguments = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-  std::vector<std::string> caller_save = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi"};
+  std::vector<std::string> caller_save = {"rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "rax"};
   std::vector<std::string> callee_save = {"r12", "r13", "r14", "r15", "rbp", "rbx"};
-  std::vector<std::string> gp_registers = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi", "r12", "r13", "r14", "r15", "rbp", "rbx"};
+  std::vector<std::string> gp_registers = {"rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "rax", "r12", "r13", "r14", "r15", "rbp", "rbx"};
 
   bool isRegister(std::string reg){
     return (reg == "rdi" || reg == "rsi" || reg == "rdx" || reg == "rcx" || reg == "r8" || reg == "r9" || reg == "rax" || reg == "rbx" || reg == "rbp" || 

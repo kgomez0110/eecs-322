@@ -249,7 +249,7 @@ int main(
     // L2::Program p = L2::parse_file(cstr);
     // delete [] cstr;
 
-    std::vector<std::string> gp_reg = {"r10", "r11", "r8", "r9", "rax", "rcx", "rdi", "rdx", "rsi", "r12", "r13", "r14", "rbp", "rbx", "r15"};
+    std::vector<std::string> gp_reg = {"rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "rax", "r12", "r13", "r14", "r15", "rbp", "rbx"};
     L2::Program newP;
     newP.entryPointLabel = p.entryPointLabel;
     int count = 0;

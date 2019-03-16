@@ -4,6 +4,9 @@
 
 namespace L1 {
 
+  struct Item {
+    std::string labelName;
+  };
 
   /*
    * Instruction interface.
@@ -11,6 +14,8 @@ namespace L1 {
   struct Instruction{
     virtual std::string makeInstruction() = 0;
   };
+
+
 
 
   /*
@@ -50,17 +55,17 @@ namespace L1 {
   
   struct Instruction_left_shift : Instruction {
     std::string destination;
-    std::string source;
+    std::string k;
     std::string makeInstruction() {
-      return "salq " + source + ", " + destination;
+      return "salq " + k + ", " + destination;
     }
   };
 
   struct Instruction_right_shift : Instruction {
     std::string destination;
-    std::string source;
+    std::string k;
     std::string makeInstruction() {
-      return "sarq " + source + ", " + destination;
+      return "sarq " + k + ", " + destination;
     }
   };
 
@@ -100,7 +105,7 @@ namespace L1 {
   struct Instruction_jump : Instruction {
     std::string label;
     std::string makeInstruction() {
-      return "jmp " + label.substr(1);
+      return "jmp " + label;
     }
   };
 
@@ -108,8 +113,6 @@ namespace L1 {
     std::string t1, t2, cmp, l1, l2;
     bool isFolded, isSwapped; 
     std::string makeInstruction() {
-      l1 = l1.substr(1);
-      l2 = l2.substr(1);
       if (isFolded){
         if (std::stoll(t1)){
           return "jmp " + l1;
@@ -150,7 +153,6 @@ namespace L1 {
     std::string t1, t2, cmp, l1;
     bool isSwapped, isFolded;
     std::string makeInstruction() {
-      l1 = l1.substr(1);
      if (isFolded){
         if (std::stoll(t1)){
           return "jmp " + l1;
@@ -255,7 +257,7 @@ namespace L1 {
   struct Instruction_label : Instruction {
     std::string label;
     std::string makeInstruction() {
-      return label.substr(1) + ":";
+      return label;
     }
   };
 

@@ -88,10 +88,10 @@ namespace IR {
 
     std::string toL3() {
       std::string result = "";
-      result.append("%tempvlksjdlkjdsf <- 8 * " + t.value + "\n");
-      result.append("%tempvlksjdlkjdsf0 <- %tempvlksjdlkjdsf + 16\n");
-      result.append("%tempvlksjdlkjdsf1 <- " + var2.value + "%tempvlksjdlkjdsf0\n");
-      result.append(var1.value + " <- load %tempvlksjdlkjdsf1");
+      result.append("%tempv <- 8 * " + t.value + "\n");
+      result.append("%tempv0 <- %tempv + 16\n");
+      result.append("%tempv1 <- " + var2.value + " + %tempv0\n");
+      result.append(var1.value + " <- load %tempv1");
       return result;
     }
 
@@ -178,15 +178,14 @@ namespace IR {
         result.append(sizes[ii] + " <- load " + size_address[ii] + "\n");
         result.append(sizes[ii] + " <- " + sizes[ii] + " >> 1\n");
       }
-
       for (int ii = dimensions.size()-1; ii>=0; ii--) {
         if (ii == dimensions.size() - 1) {
           result.append(final_address + " <- " + dimensions[ii].value + "\n");
         }
         else {
-          result.append(new_var[ii] + " <- " + dimensions[ii].value + "\n");
+          result.append(new_vars[ii] + " <- " + dimensions[ii].value + "\n");
           for (int jj = ii+1; jj<dimensions.size(); jj++){
-            result.append(new_var[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
+            result.append(new_vars[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
           }
           result.append(final_address + " <- " + final_address + " + " + new_vars[ii] + "\n");
         }
@@ -244,9 +243,9 @@ namespace IR {
           result.append(final_address + " <- " + dimensions[ii].value + "\n");
         }
         else {
-          result.append(new_var[ii] + " <- " + dimensions[ii].value + "\n");
+          result.append(new_vars[ii] + " <- " + dimensions[ii].value + "\n");
           for (int jj = ii+1; jj<dimensions.size(); jj++){
-            result.append(new_var[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
+            result.append(new_vars[ii] + " <- " + new_vars[ii] + " * " + sizes[ii] + "\n");
           }
           result.append(final_address + " <- " + final_address + " + " + new_vars[ii] + "\n");
         }
@@ -308,7 +307,8 @@ namespace IR {
       // this now has enough space for all the elements, plus 1 space to stroe # of dimensions and stores each of those dimensions
       result.append(v0 + " <- " + v0 + " + " + std::to_string((args.size()+1)*2) + "\n");
       
-      std::string a = makeVar(temp, temp_counter); // this is gonna be the array
+     // std::string a = makeVar(temp, temp_counter); // this is gonna be the array
+      std::string a = var.value;
       result.append(a + " <- call allocate(" + v0 + ", 1)\n");
       std::string v1 = makeVar(temp, temp_counter);
       result.append(v1 + " <- " + a + " + 8\n");
@@ -337,6 +337,19 @@ namespace IR {
 
   };
 
+  // var <- new Tuple(s)
+  struct Instruction_make_tuple : Instruction {
+    Item var, s;
+
+    std::string toL3() {
+      return var.value + " <- call allocate (" + s.value + ", 1)";
+    }
+    Instruction_make_tuple (std::vector<Item> items) {
+      this->var = items[0];
+      this->s = items[1];
+    }
+  };
+
   // var <- s
   struct Instruction_move : Instruction {
     Item var, s;
@@ -353,4 +366,48 @@ namespace IR {
       return "";
     } 
   };
+
+  // var[t] <- var
+  struct Instruction_store_tuple : Instruction { 
+    Item tuple, var, index;
+
+    std::string toL3() {
+      std::string result = "";
+      std::string temp = "%temp_wooo";
+      result.append(temp + " <- 8 * " + index.value + "\n");
+      result.append(temp + " <- 8 + " + temp + "\n");
+      result.append(temp + " <- " + tuple.value + " + " + temp + "\n");
+      result.append("store " + temp + " <- " + var.value);
+      return result;
+    }
+
+    Instruction_store_tuple(std::vector<Item> items) {
+      this->tuple = items[0];
+      this->index = items[1];
+      this->var = items[2];
+    }
+
+  };
+
+  // var <- var[t]
+  struct Instruction_load_tuple : Instruction { 
+    Item var, tuple, index;
+
+    std::string toL3() {
+      std::string result = "";
+      std::string temp = "%temp_woooo";
+      result.append(temp + " <- 8 * " + index.value + "\n");
+      result.append(temp + " <- 8 + " + temp + "\n");
+      result.append(temp + " <- " + tuple.value + " + " + temp + "\n");
+      result.append(var.value + " <- load " + temp);
+      return result;
+    }
+
+    Instruction_load_tuple(std::vector<Item> items) {
+      this->var = items[0];
+      this->tuple = items[1];
+      this->index = items[2];
+    }
+  };
+
 }

@@ -67,7 +67,16 @@ int main(
   std::ofstream outputFile;
   outputFile.open("prog.L3");
   for (IR::Function* f : p.functions) {
-    outputFile << "define " << f->name << "(){\n";
+    outputFile << "define " << f->name << "(";
+    for (int ii = 0; ii<f->arguments.size(); ii+=2) {
+      if (ii == 0){
+        outputFile << f->arguments[ii+1].value;
+      }
+      else {
+        outputFile << ", " << f->arguments[ii+1].value;
+      }
+    }
+    outputFile << "){\n";
     for (IR::Instruction* i : f->instructions){
       outputFile << i->toL3() << "\n";
     }
