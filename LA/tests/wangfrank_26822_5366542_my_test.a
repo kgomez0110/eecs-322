@@ -31,6 +31,7 @@ void main ( ){
     m[1][0][4] <- v
     r <-  find(m, v)
     m[1][0][4] <- 5
+    //print(m)
     sum <-  compute_sum(m)
      print(sum)
      print(r)
@@ -86,6 +87,7 @@ int64 compute_sum(int64[][][] m){
     :Body3
     int64 d
     d <- m[index][index2][index3]
+    print(d)
     sum <- sum + d
     br :endBody3
 

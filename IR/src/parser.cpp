@@ -225,6 +225,7 @@ namespace IR {
         >
       >
     > {};
+    
   struct Instruction_return_rule :
     str_return {};
   
@@ -465,6 +466,7 @@ namespace IR {
   
   std::vector<Item> items;
   std::unordered_map<std::string, bool> isTuple;
+  int count = 0;
 
 
   template< typename Rule >
@@ -699,9 +701,10 @@ namespace IR {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_make_array(items);
+      auto inst = new Instruction_make_array(items , count);
       currentF->instructions.push_back(inst);
       items = {};
+      count += 10;
     }
   };
 
@@ -726,8 +729,9 @@ namespace IR {
         currentF->instructions.push_back(inst);
       }
       else {
-        auto inst = new Instruction_load_array(items);
+        auto inst = new Instruction_load_array(items, count);
         currentF->instructions.push_back(inst);
+        count+=10;
       }
       items = {};
     }
@@ -743,8 +747,9 @@ namespace IR {
         currentF->instructions.push_back(inst);
       }
       else {
-        auto inst = new Instruction_store_array(items);
+        auto inst = new Instruction_store_array(items, count);
         currentF->instructions.push_back(inst);
+        count+=10;
       }
       items = {};
     }

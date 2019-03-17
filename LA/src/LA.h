@@ -43,7 +43,7 @@ namespace LA {
         return i.value;
       }
       catch (const std::exception& e){
-        if (i.value[0] == ':' || isType(i))
+        if (i.value[0] == ':' || isType(i) || i.value[0] == '%')
           return i.value;
         else if (call_instruct && isFunction(i))
           return ":" + i.value;
@@ -81,7 +81,7 @@ namespace LA {
 
     std::pair<std::string, Item> toDecode(Item i, int count = 0) {
       std::string result = "";
-      std::string temp_var = "%dwoooootempboooys_" + std::to_string(count);
+      std::string temp_var = "%decoded_temp_" + std::to_string(count);
       Item new_item;
       new_item.value = temp_var;
       result.append(temp_var + " <- " + convertVar(i) + " >> 1\n");
@@ -96,6 +96,17 @@ namespace LA {
       result.append(convertVar(i) + " <- " + convertVar(i) + " << 1\n");
       result.append(convertVar(i) + " <- " + convertVar(i) + " + 1\n");
       return result;
+    }
+    
+    std::pair<std::string, Item> tempEncode(Item i, int count = 0) {
+      std::string result = "";
+      std::string temp_var = "%encoded_temp_" + std::to_string(count);
+      Item new_item;
+      new_item.value = temp_var;
+      result.append(temp_var + " <- " + convertVar(i) + " << 1\n");
+      result.append(temp_var + " <- " + convertVar(i) + " + 1\n");
+      std::pair<std::string, Item> p = {result, new_item};
+      return p;
     }
   };
 
@@ -116,7 +127,7 @@ namespace LA {
     std::string toIR() {
       return "return " + convertVar(t);
     }
-    Instruction_return_t(Item i) : t(i) {}
+    Instruction_return_t(Item i) : t(encodeConst(i)) {}
   };
 
   // label
@@ -161,12 +172,17 @@ namespace LA {
   // name <- length name t
   struct Instruction_get_length : Instruction {
     Item var1, var2, t;
+    int count;
 
     std::string toIR() {
-      return convertVar(var1) + " <- length " + convertVar(var2) + " " + convertVar(t);
+      std::string result = "";
+      std::pair<std::string, Item> p = toDecode(t, count);
+      result.append(p.first);
+      result.append(convertVar(var1) + " <- length " + convertVar(var2) + " " + convertVar(p.second));
+      return result;
     }
 
-    Instruction_get_length(Item v1, Item v2, Item t1) : var1(v1), var2(v2), t(t1) {}
+    Instruction_get_length(Item v1, Item v2, Item t1, int c) : var1(v1), var2(v2), t(encodeConst(t1)), count(c) {}
   };
 
   // var <- call callee (args)
@@ -234,10 +250,16 @@ namespace LA {
 
     std::string toIR() {
       std::string array_check = "";
+      for (int jj = 0; jj<indices.size(); jj++) {
+        std::pair<std::string, Item> p = toDecode(indices[jj], count++);
+        array_check.append(p.first);
+        indices[jj] = p.second;
+      }
+      
       std::string error = ":arrayerr_" + std::to_string(count);
       std::string cont = ":continue_" + std::to_string(count);
-      std::string len_var = "%sizeofdimension_yeet";
-      std::string cmp_var = "%comparingsize_yeet";
+      std::string len_var = "%sizeofdimension_";
+      std::string cmp_var = "%comparingsize_";
 
       array_check.append(cmp_var + " <- " + convertVar(array) + " = 0\n");
       array_check.append("br " + cmp_var + " " + error + " " + cont + "\n");
@@ -251,16 +273,61 @@ namespace LA {
       cont = cont + "_" + std::to_string(count);
 
       for (int ii = 0; ii<indices.size(); ii++) {
-        array_check.append(len_var + " <- length " + convertVar(array) + std::to_string(ii) + "\n");
+        array_check.append(len_var + " <- length " + convertVar(array) + " " + std::to_string(ii) + "\n");
+        array_check.append(len_var + " <- " + len_var + " >> 1\n");
         array_check.append(cmp_var + " <- " + convertVar(indices[ii]) + " < " + len_var + "\n");
         array_check.append("br " + cmp_var + " " + cont + " " + error + "\n");
         array_check.append(error + "\n");
+        array_check.append("%error_var <- " + convertVar(indices[ii]) + " << 1\n");
+        array_check.append("%error_var <- 1 + %error_var\n");
+        array_check.append("call array-error(" + convertVar(array) + ", %error_var)\n");
         array_check.append("call array-error(" + convertVar(array) + ", " + convertVar(indices[ii]) + ")\n");
         array_check.append(cont + "\n");
 
         error = error + "_" + std::to_string(count);
         cont = cont + "_" + std::to_string(count);
       }
+
+      std::string result = array_check + convertVar(name) + " <- " + convertVar(array);
+      int count = 0;
+      for (int ii = 0; ii<indices.size(); ii++) {
+        Item i = indices[ii];
+        result.append("[" + convertVar(i) + "]");
+      }
+      return result;
+
+    }
+
+    Instruction_load_array(std::vector<Item> args, int c) {
+      this->count = c;
+      this->name = args[0];
+      this->array = args[1];
+      for (int ii = 2; ii<args.size(); ii++){
+        this->indices.push_back(encodeConst(args[ii]));
+      }
+    }
+  };
+
+   // var <- var[t]*
+  // name <- name[t]*
+  struct Instruction_load_tuple : Instruction {
+    Item name, array;
+    std::vector<Item> indices;
+    int count;
+
+    std::string toIR() {
+      std::string array_check = "";
+      std::string error = ":tupleerr_" + std::to_string(count);
+      std::string cont = ":continue_" + std::to_string(count);
+      std::string len_var = "%sizeofdimension_";
+      std::string cmp_var = "%comparingsize_";
+
+      array_check.append(cmp_var + " <- " + convertVar(array) + " = 0\n");
+      array_check.append("br " + cmp_var + " " + error + " " + cont + "\n");
+      array_check.append(error + "\n");
+      array_check.append("call array-error(0,0)\n");
+      array_check.append(cont + "\n");
+
 
       std::string result = array_check + convertVar(name) + " <- " + convertVar(array);
       std::string decoded = "";
@@ -280,7 +347,7 @@ namespace LA {
 
     }
 
-    Instruction_load_array(std::vector<Item> args, int c) {
+    Instruction_load_tuple(std::vector<Item> args, int c) {
       this->count = c;
       this->name = args[0];
       this->array = args[1];
@@ -320,10 +387,15 @@ namespace LA {
 
       // initial declaration check
       std::string array_check = "";
+      for (int jj = 0; jj<indices.size(); jj++) {
+        std::pair<std::string, Item> p = toDecode(indices[jj], count++);
+        array_check.append(p.first);
+        indices[jj] = p.second;
+      }
       std::string error = ":arrayerr_" + std::to_string(count);
       std::string cont = ":continue_" + std::to_string(count);
-      std::string len_var = "%sizeofdimension_yeet";
-      std::string cmp_var = "%comparingsize_yeet";
+      std::string len_var = "%sizeofdimension_";
+      std::string cmp_var = "%comparingsize_";
 
 
       array_check.append(cmp_var + " <- " + convertVar(array) + " = 0\n");
@@ -338,11 +410,14 @@ namespace LA {
       cont = cont + "_" + std::to_string(count);
 
       for (int ii = 0; ii<indices.size(); ii++) {
-        array_check.append(len_var + " <- length " + convertVar(array) + std::to_string(ii) + "\n");
+        array_check.append(len_var + " <- length " + convertVar(array) + " " + std::to_string(ii) + "\n");
+        array_check.append(len_var + " <- " + len_var + " >> 1\n");
         array_check.append(cmp_var + " <- " + convertVar(indices[ii]) + " < " + len_var + "\n");
         array_check.append("br " + cmp_var + " " + cont + " " + error + "\n");
         array_check.append(error + "\n");
-        array_check.append("call array-error(" + convertVar(array) + ", " + convertVar(indices[ii]) + ")\n");
+        array_check.append("%error_var <- " + convertVar(indices[ii]) + " << 1\n");
+        array_check.append("%error_var <- 1 + %error_var\n");
+        array_check.append("call array-error(" + convertVar(array) + ", %error_var)\n");
         array_check.append(cont + "\n");
 
         error = error + "_" + std::to_string(count);
@@ -360,7 +435,46 @@ namespace LA {
 
     Instruction_store_array(std::vector<Item> args, int c) {
       this->count = c;
-      this->name = args[args.size()-1];
+      this->name = encodeConst(args[args.size()-1]);
+      this->array = args[0];
+      for (int ii = 1; ii<args.size()-1; ii++){
+        this->indices.push_back(encodeConst(args[ii]));
+      }
+    }
+  };
+
+  struct Instruction_store_tuple : Instruction {
+    Item name, array;
+    std::vector<Item> indices;
+    int count;
+    std::string toIR() {
+
+      // initial declaration check
+      std::string array_check = "";
+      std::string error = ":tupleerr_" + std::to_string(count);
+      std::string cont = ":continue_" + std::to_string(count);
+      std::string len_var = "%sizeofdimension_";
+      std::string cmp_var = "%comparingsize_";
+
+
+      array_check.append(cmp_var + " <- " + convertVar(array) + " = 0\n");
+      array_check.append("br " + cmp_var + " " + error + " " + cont + "\n");
+      array_check.append(error + "\n");
+      array_check.append("call array-error(0,0)\n");
+      array_check.append(cont + "\n");
+
+      std::string result = array_check;
+      result.append(convertVar(array));
+      for (Item i : indices){
+        result.append("[" + convertVar(i) + "]");
+      }
+      result.append(" <- " + convertVar(name));
+      return result;
+    }
+
+    Instruction_store_tuple(std::vector<Item> args, int c) {
+      this->count = c;
+      this->name = encodeConst(args[args.size()-1]);
       this->array = args[0];
       for (int ii = 1; ii<args.size()-1; ii++){
         this->indices.push_back(args[ii]);
@@ -372,13 +486,19 @@ namespace LA {
   // name <- t op t
   struct Instruction_op : Instruction {
     Item var, t1, t2, op;
+    int count;
     std::string toIR() {
-      std::string result = convertVar(var) + " <- " + convertVar(t1) + " " + op.value + " " + convertVar(t2);
+      std::pair<std::string, Item> t1_decoded = toDecode(t1, count);
+      std::pair<std::string, Item> t2_decoded = toDecode(t2, ++count);
+      std::string result = "";
+      result.append(t1_decoded.first);
+      result.append(t2_decoded.first);
+      result.append(convertVar(var) + " <- " + convertVar(t1_decoded.second) + " " + op.value + " " + convertVar(t2_decoded.second) + "\n");
       result.append(toEncode(var));
       return result;
     }  
 
-    Instruction_op(Item v, Item t, Item o, Item ot) : var(v), t1(encodeConst(t)), t2(encodeConst(ot)), op(o) {}
+    Instruction_op(Item v, Item t, Item o, Item ot, int c) : var(v), t1(encodeConst(t)), t2(encodeConst(ot)), op(o), count(c) {}
   };
 
   // var <- new Array(args)
@@ -432,7 +552,8 @@ namespace LA {
     Item type, var;
     std::string toIR() {
       std::string result = "";
-      result.append(convertVar(var) + " <- 0\n");
+     // if (type.value[type.value.size()-1] == ']')
+        result.append(convertVar(var) + " <- 0\n");
       result.append(type.value + " " + convertVar(var));
       return result;
     } 
@@ -446,7 +567,7 @@ namespace LA {
       return "call print(" + convertVar(t) + ")";
     }
 
-    Instruction_print(Item t1) : t(t1) {}
+    Instruction_print(Item t1) : t(encodeConst(t1)) {}
   };
 
 }

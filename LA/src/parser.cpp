@@ -180,16 +180,22 @@ namespace LA {
     > {};
 
   struct array_access_rule :
-    pegtl::plus<
-      pegtl::seq<
-        pegtl::one<'['>, 
-        seps, 
-        t_rule, 
-        seps, 
-        pegtl::one<']'>, 
-        seps
+    pegtl::seq<
+      Name_rule,
+      seps,
+      pegtl::plus<
+        pegtl::seq<
+          pegtl::one<'['>, 
+          seps, 
+          t_rule, 
+          seps, 
+          pegtl::one<']'>, 
+          seps
+        >
       >
     > {};
+
+
   struct Instruction_return_rule :
     str_return {};
   
@@ -253,20 +259,16 @@ namespace LA {
       seps,
       move,
       seps,
-      Name_rule,
-      seps,
       array_access_rule
     > {};
   
   struct Instruction_store_array_rule :
     pegtl::seq<
-      Name_rule,
-      seps,
       array_access_rule,
       seps,
       move,
       seps,
-      Name_rule
+      s_rule
     > {};
 
   struct Instruction_get_length_rule :
@@ -287,6 +289,7 @@ namespace LA {
       Name_rule,
       seps,
       pegtl::one<'('>,
+      seps,
       pegtl::opt<args_rule>,
       pegtl::one<')'>
     > {};
@@ -322,6 +325,8 @@ namespace LA {
   struct Instruction_make_tuple_rule :
     pegtl::seq<
       Name_rule,
+      seps,
+      move,
       seps,
       new_key,
       seps,
@@ -384,16 +389,18 @@ namespace LA {
       Name_rule
     > {};
   
-  struct Function_vars:
+  struct type_vars:
     pegtl::sor<
-      type_var,
-      seps,
       pegtl::seq<
         type_var,
         seps,
-        pegtl::plus<pegtl::one<'('>, seps, type_var, seps>
-      >
+        pegtl::opt<pegtl::plus<pegtl::one<','>, seps, type_var, seps>>
+      >,
+      seps
     > {};
+
+  struct Function_vars:
+    type_vars {};
 
   struct Function_name:
     name {};
@@ -408,6 +415,7 @@ namespace LA {
       Function_name,
       seps,
       pegtl::one<'('>,
+      seps,
       Function_vars,
       pegtl::one<')'>,
       seps,
@@ -436,6 +444,7 @@ namespace LA {
   
   std::vector<Item> items;
   int array_access_counter = 0;
+  std::unordered_map<std::string, bool> isTuple;
 
   template< typename Rule >
   struct action : pegtl::nothing< Rule > {};
@@ -454,6 +463,14 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
+      for (int ii = 0; ii<items.size(); ii+=2){
+        if (items[ii].value == "tuple") {
+          isTuple[items[ii+1].value] = true;
+        }
+        else {
+          isTuple[items[ii+1].value] = false;
+        }
+      }
       currentF->arguments = items;
       items = {};
     }
@@ -596,9 +613,10 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_op(items[0], items[1], items[2], items[3]);
+      auto inst = new Instruction_op(items[0], items[1], items[2], items[3], array_access_counter);
       currentF->instructions.push_back(inst);
       items = {};
+      array_access_counter++;
     }
   };
 
@@ -618,6 +636,12 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
+      if (items[0].value == "tuple") {
+        isTuple[items[1].value] = true;
+      }
+      else {
+        isTuple[items[1].value] = false;
+      }
       auto inst = new Instruction_declare_var(items[0], items[1]);
       currentF->instructions.push_back(inst);
       items = {};
@@ -629,9 +653,10 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_get_length(items[0], items[1], items[2]);
+      auto inst = new Instruction_get_length(items[0], items[1], items[2], array_access_counter);
       currentF->instructions.push_back(inst);
       items = {};
+      array_access_counter++;
     }
   };
 
@@ -662,8 +687,14 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_load_array(items, array_access_counter);
-      currentF->instructions.push_back(inst);
+      if (isTuple[items[1].value]) {
+        auto inst = new Instruction_load_tuple(items, array_access_counter);
+        currentF->instructions.push_back(inst);
+      }
+      else {
+        auto inst = new Instruction_load_array(items, array_access_counter);
+        currentF->instructions.push_back(inst);
+      }
       items = {};
       array_access_counter++;
     }
@@ -674,8 +705,14 @@ namespace LA {
     template< typename Input >
     static void apply( const Input & in, Program & p){
       auto currentF = p.functions.back();
-      auto inst = new Instruction_store_array(items, array_access_counter);
-      currentF->instructions.push_back(inst);
+      if (isTuple[items[0].value]) {
+        auto inst = new Instruction_store_tuple(items, array_access_counter);
+        currentF->instructions.push_back(inst);
+      }
+      else {
+        auto inst = new Instruction_store_array(items, array_access_counter);
+        currentF->instructions.push_back(inst);
+      }
       items = {};
       array_access_counter++;
     }

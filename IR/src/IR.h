@@ -154,6 +154,7 @@ namespace IR {
   struct Instruction_load_array : Instruction {
     Item var1, array;
     std::vector<Item> dimensions;
+    int count;
     std::string toL3() {
       int offset = 16 + (dimensions.size() * 8);
       std::vector<std::string> size_address;
@@ -166,9 +167,9 @@ namespace IR {
       std::string offset_var = "%Offset";
       std::string result = "";
       for (int ii = 0; ii<dimensions.size(); ii++){
-        size_address.push_back(address_var + std::to_string(ii));
-        sizes.push_back(size_var + std::to_string(ii));
-        new_vars.push_back(new_var + std::to_string(ii));
+        size_address.push_back(address_var + std::to_string(ii+count));
+        sizes.push_back(size_var + std::to_string(ii+count));
+        new_vars.push_back(new_var + std::to_string(ii+count));
       }
 
       // grabs the size of each dimension and loads them into the size vars
@@ -199,9 +200,10 @@ namespace IR {
       return result;
     }
 
-    Instruction_load_array(std::vector<Item> args) {
+    Instruction_load_array(std::vector<Item> args, int c) {
       this->var1 = args[0];
       this->array = args[1];
+      this->count = c;
       for (int ii = 2; ii<args.size(); ii++){
         this->dimensions.push_back(args[ii]);
       }
@@ -212,6 +214,7 @@ namespace IR {
   struct Instruction_store_array : Instruction {
     Item var1, array;
     std::vector<Item> dimensions;
+    int count;
 
     std::string toL3() {
       int offset = 16 + (dimensions.size() * 8);
@@ -225,9 +228,9 @@ namespace IR {
       std::string offset_var = "%Offset";
       std::string result = "";
       for (int ii = 0; ii<dimensions.size(); ii++){
-        size_address.push_back(address_var + std::to_string(ii));
-        sizes.push_back(size_var + std::to_string(ii));
-        new_vars.push_back(new_var + std::to_string(ii));
+        size_address.push_back(address_var + std::to_string(ii+count));
+        sizes.push_back(size_var + std::to_string(ii+count));
+        new_vars.push_back(new_var + std::to_string(ii+count));
       }
 
       // grabs the size of each dimension and loads them into the size vars
@@ -260,9 +263,10 @@ namespace IR {
 
     }
 
-    Instruction_store_array(std::vector<Item> args) {
+    Instruction_store_array(std::vector<Item> args, int c) {
       this->var1 = args[args.size()-1];
       this->array = args[0];
+      this->count = c;
       for (int ii = 1; ii<args.size()-1; ii++){
         this->dimensions.push_back(args[ii]);
       }
@@ -283,14 +287,15 @@ namespace IR {
   struct Instruction_make_array : Instruction {
     Item var;
     std::vector<Item> args;
+    int count;
     std::string makeVar(std::string prefix, int &count){
       count++;
       return prefix + std::to_string(count);
     }
     std::string toL3() {
       std::string arg_temp = "%pd";
-      int arg_counter = 0;
-      int temp_counter = 0;
+      int arg_counter = count;
+      int temp_counter = count;
       std::string temp = "%vd";
       std::string result = "";
       std::string v0 = makeVar(temp, temp_counter);
@@ -328,8 +333,9 @@ namespace IR {
       return result;
     }
 
-    Instruction_make_array(std::vector<Item> items) {
+    Instruction_make_array(std::vector<Item> items, int count) {
       this->var = items[0];
+      this->count = count;
       for (int ii = 1; ii <items.size(); ii++){
         this->args.push_back(items[ii]);
       }

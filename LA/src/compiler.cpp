@@ -69,18 +69,18 @@ int main(
   outputFile.open("prog.IR");
   
   for (LA::Function* f : p.functions) {
-    outputFile << "define " << f->type << " :" << f->name << "(";
+    outputFile << "define " << f->type << " :" << f->name << "( ";
     for (int ii = 0; ii<f->arguments.size(); ii += 2) {
       if (ii == 0)
-        outputFile << f->arguments[ii].value << " " << f->arguments[ii+1].value;
+        outputFile << f->arguments[ii].value << " %" << f->arguments[ii+1].value;
       else
-        outputFile << ", " << f->arguments[ii].value << f->arguments[ii+1].value;
+        outputFile << ", " << f->arguments[ii].value << " %" << f->arguments[ii+1].value;
     }
-    outputFile << "){\n";
+    outputFile << "){\n\n";
     for (LA::Instruction* i : f->instructions){
       outputFile << i->toIR() << "\n";
     }
-    outputFile << "}\n";
+    outputFile << "}\n\n";
   }
   outputFile.close();
 
